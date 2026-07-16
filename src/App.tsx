@@ -2523,7 +2523,7 @@ export default function App() {
                   <div className="space-y-2.5">
                     <button
                       id="btn-goto-terms"
-                      onClick={() => setCurrentScreen('terms')}
+                      onClick={() => navigateTo('/terms')}
                       className="w-full p-4 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-150 dark:border-slate-800/60 flex items-center justify-between hover:bg-white/60 dark:hover:bg-slate-900/60 transition-all text-left cursor-pointer"
                     >
                       <div className="flex items-center gap-3">
@@ -2538,7 +2538,7 @@ export default function App() {
 
                     <button
                       id="btn-goto-privacy"
-                      onClick={() => setCurrentScreen('privacy')}
+                      onClick={() => navigateTo('/privacy')}
                       className="w-full p-4 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-150 dark:border-slate-800/60 flex items-center justify-between hover:bg-white/60 dark:hover:bg-slate-900/60 transition-all text-left cursor-pointer"
                     >
                       <div className="flex items-center gap-3">
