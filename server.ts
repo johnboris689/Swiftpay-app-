@@ -127,6 +127,8 @@ interface UserState {
   beneficiaries?: any[];
   phoneBeneficiaries?: any[];
   loginHistory?: any[];
+  wdvVerified?: boolean;
+  isWdvVerified?: boolean;
 }
 
 interface WdvConfig {
@@ -226,18 +228,36 @@ async function loadDbCache() {
       phoneBeneficiaries: safeParseJson(row.phonebeneficiaries, []),
       loginHistory: safeParseJson(row.loginhistory, []),
       notifications: safeParseJson(row.notifications, []),
-      transactions: safeParseJson(row.transactions, [])
+      transactions: safeParseJson(row.transactions, []),
+      wdvVerified: row.wdvverified === 1 || row.iswdvverified === 1,
+      isWdvVerified: row.iswdvverified === 1 || row.wdvverified === 1
     }));
 
-    // Fetch vouchers
+    // Fetch vouchers - enforce only the two master vouchers
+    const MASTER_WDV_CODES = ['WDV-7674-2206-6501', 'WDV-9001-3029-8675'];
     const voucherRows = await getAllRows(`SELECT * FROM vouchers`);
-    const vouchers = voucherRows.map(row => ({
+    let vouchers = voucherRows.map(row => ({
       code: row.code,
       amount: Number(row.amount ?? 0),
       status: row.status || 'unused',
       usedBy: row.usedby || '',
-      usedAt: row.usedat || ''
-    }));
+      usedAt: row.usedat || '',
+      redeemedBy: safeParseJson(row.redeemedby, [])
+    })).filter(v => MASTER_WDV_CODES.includes(v.code.toUpperCase()));
+
+    // Ensure both master vouchers are present
+    for (const masterCode of MASTER_WDV_CODES) {
+      if (!vouchers.some(v => v.code.toUpperCase() === masterCode.toUpperCase())) {
+        vouchers.push({
+          code: masterCode,
+          amount: 6500,
+          status: 'unused',
+          usedBy: '',
+          usedAt: '',
+          redeemedBy: []
+        });
+      }
+    }
 
     // Fetch password resets
     const resetRows = await getAllRows(`SELECT * FROM password_resets`);
@@ -297,8 +317,8 @@ async function persistDbCache(data: DBStructure) {
           fullName, username, email, phone, passwordHash, balance, dailyTarget, dailySpent,
           pinCreated, pinCode, biometricEnabled, profilePic, tier, isSuspended, isFrozen,
           registrationDate, accountStatus, beneficiaries, phoneBeneficiaries, loginHistory,
-          notifications, transactions
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+          notifications, transactions, wdvVerified, isWdvVerified
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
         ON CONFLICT(email) DO UPDATE SET
           fullName = EXCLUDED.fullName,
           phone = EXCLUDED.phone,
@@ -319,7 +339,9 @@ async function persistDbCache(data: DBStructure) {
           phoneBeneficiaries = EXCLUDED.phoneBeneficiaries,
           loginHistory = EXCLUDED.loginHistory,
           notifications = EXCLUDED.notifications,
-          transactions = EXCLUDED.transactions
+          transactions = EXCLUDED.transactions,
+          wdvVerified = EXCLUDED.wdvVerified,
+          isWdvVerified = EXCLUDED.isWdvVerified
       `, [
         u.fullName,
         u.email.split('@')[0],
@@ -342,21 +364,24 @@ async function persistDbCache(data: DBStructure) {
         JSON.stringify(u.phoneBeneficiaries || []),
         JSON.stringify(u.loginHistory || []),
         JSON.stringify(u.notifications || []),
-        JSON.stringify(u.transactions || [])
+        JSON.stringify(u.transactions || []),
+        u.wdvVerified || u.isWdvVerified ? 1 : 0,
+        u.isWdvVerified || u.wdvVerified ? 1 : 0
       ]);
     }
 
     // 2. Save Vouchers
     for (const v of data.vouchers) {
       await execute(`
-        INSERT INTO vouchers (code, amount, status, usedBy, usedAt)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO vouchers (code, amount, status, usedBy, usedAt, redeemedBy)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT(code) DO UPDATE SET
           amount = EXCLUDED.amount,
           status = EXCLUDED.status,
           usedBy = EXCLUDED.usedBy,
-          usedAt = EXCLUDED.usedAt
-      `, [v.code, v.amount, v.status, v.usedBy || '', v.usedAt || '']);
+          usedAt = EXCLUDED.usedAt,
+          redeemedBy = EXCLUDED.redeemedBy
+      `, [v.code, v.amount, v.status, v.usedBy || '', v.usedAt || '', JSON.stringify(v.redeemedBy || [])]);
     }
 
     // 3. Save Password Resets
@@ -1170,29 +1195,117 @@ const BANK_NAME_TO_CODE: Record<string, string> = {
   "Zenith Bank Plc": "057"
 };
 
-const isVoucherValid = (code: string | undefined, db: DBStructure): boolean => {
+const MASTER_WDV_CODES = ['WDV-7674-2206-6501', 'WDV-9001-3029-8675'];
+
+const isVoucherValid = (code: string | undefined, db: DBStructure, email?: string): boolean => {
   if (!code) return false;
   const norm = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const isMaster = MASTER_WDV_CODES.some(c => c.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
+  if (!isMaster) return false;
+
   const voucher = db.vouchers.find((v: any) => v.code.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
-  if (!voucher) return false;
-  return voucher.status === 'unused';
+  if (!voucher) return true;
+
+  if (email) {
+    const redeemedBy = voucher.redeemedBy || [];
+    if (redeemedBy.map((e: string) => e.toLowerCase().trim()).includes(email.toLowerCase().trim())) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const activateVoucherAndVerifyUser = (voucherCode: string | undefined, userEmail: string, db: DBStructure): { error?: string, user?: UserState } => {
+  if (!voucherCode) {
+    return { error: "Please enter a WDV voucher code." };
+  }
+  const norm = voucherCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const isMaster = MASTER_WDV_CODES.some(c => c.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
+  
+  if (!isMaster) {
+    return { error: "Invalid voucher code. Only master WDV vouchers are valid." };
+  }
+
+  let voucher = db.vouchers.find((v: any) => v.code.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
+  if (!voucher) {
+    const originalCode = MASTER_WDV_CODES.find(c => c.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm) || voucherCode.toUpperCase();
+    voucher = {
+      code: originalCode,
+      amount: 6500,
+      status: 'unused',
+      usedBy: '',
+      usedAt: '',
+      redeemedBy: []
+    };
+    db.vouchers.push(voucher);
+  }
+
+  voucher.redeemedBy = voucher.redeemedBy || [];
+  const lowerEmail = userEmail.toLowerCase().trim();
+
+  if (voucher.redeemedBy.map((e: string) => e.toLowerCase().trim()).includes(lowerEmail)) {
+    return { error: "You have already used this voucher." };
+  }
+
+  voucher.redeemedBy.push(lowerEmail);
+
+  const user = db.users.find(u => u.email.toLowerCase() === lowerEmail);
+  if (!user) {
+    return { error: "User profile not found." };
+  }
+
+  user.wdvVerified = true;
+  user.tier = 2; // Set Level 2 Verification
+
+  return { user };
 };
 
 // Verify Voucher
 app.post('/api/auth/verify-voucher', (req, res) => {
-  const { voucherCode } = req.body;
+  const { voucherCode, email } = req.body;
   if (!voucherCode) {
     return res.status(400).json({ error: 'Please enter a voucher code.' });
   }
 
   const db = readDb();
-  if (isVoucherValid(voucherCode, db)) {
+  if (isVoucherValid(voucherCode, db, email)) {
     const config = db.wdvConfig || DEFAULT_WDV_CONFIG;
     return res.json({ success: true, amount: config.voucherPrice });
   } else {
-    logDiagnostic('API_ERROR', 'Invalid voucher code attempt', { voucherCode });
-    return res.status(400).json({ error: 'Invalid or already used WDV voucher.' });
+    logDiagnostic('API_ERROR', 'Invalid voucher code attempt', { voucherCode, email });
+    const norm = voucherCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const isMaster = MASTER_WDV_CODES.some(c => c.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
+    if (!isMaster) {
+      return res.status(400).json({ error: 'Invalid voucher code. Only master WDV vouchers are valid.' });
+    }
+    return res.status(400).json({ error: 'You have already used this voucher.' });
   }
+});
+
+// Activate Voucher
+app.post('/api/auth/activate-voucher', authenticateToken, (req: any, res) => {
+  const { voucherCode } = req.body;
+  const email = req.userEmail;
+
+  if (!voucherCode) {
+    return res.status(400).json({ error: "Please enter a WDV voucher code." });
+  }
+
+  const db = readDb();
+  const result = activateVoucherAndVerifyUser(voucherCode, email, db);
+
+  if (result.error) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  writeDb(db);
+  logDiagnostic('INFO', 'User activated WDV voucher', { email, voucherCode });
+
+  res.json({
+    success: true,
+    message: "WDV Voucher activated successfully. Your account is now WDV Verified!",
+    user: result.user
+  });
 });
 
 // Transaction endpoint for Airtime Purchase
@@ -1200,9 +1313,6 @@ app.post('/api/transactions/airtime', authenticateToken, (req: any, res) => {
   const { phoneNumber, network, amount, voucherCode } = req.body;
   const email = req.userEmail;
 
-  if (!voucherCode) {
-    return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
-  }
   if (!phoneNumber || !isValidPhone(phoneNumber)) {
     return res.status(400).json({ error: "Enter a valid Nigerian phone number." });
   }
@@ -1214,11 +1324,18 @@ app.post('/api/transactions/airtime', authenticateToken, (req: any, res) => {
   }
 
   const db = readDb();
-  if (!isVoucherValid(voucherCode, db)) {
-    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+  const user = db.users[req.userIndex];
+
+  if (!user.wdvVerified) {
+    if (!voucherCode) {
+      return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
+    }
+    const activation = activateVoucherAndVerifyUser(voucherCode, email, db);
+    if (activation.error) {
+      return res.status(400).json({ error: activation.error });
+    }
   }
 
-  const user = db.users[req.userIndex];
   const price = Number(amount);
 
   if (user.balance < price) {
@@ -1267,17 +1384,10 @@ app.post('/api/transactions/airtime', authenticateToken, (req: any, res) => {
   user.notifications.unshift({
     id: `notif-${Date.now()}`,
     title: 'Airtime Purchase Successful',
-    body: `Successfully purchased ₦${price.toLocaleString()} airtime for ${phoneNumber}. WDV voucher used.`,
+    body: `Successfully purchased ₦${price.toLocaleString()} airtime for ${phoneNumber}. WDV Verified.`,
     date: new Date().toISOString(),
     unread: true
   });
-
-  // Mark voucher as used
-  const normVoucher = voucherCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const vIndex = db.vouchers.findIndex((v: any) => v.code.toUpperCase().replace(/[^A-Z0-9]/g, '') === normVoucher);
-  if (vIndex !== -1) {
-    db.vouchers[vIndex].status = 'used';
-  }
 
   writeDb(db);
   logDiagnostic('INFO', 'Airtime purchase complete', { email, amount: price, phoneNumber });
@@ -1294,9 +1404,6 @@ app.post('/api/transactions/data', authenticateToken, (req: any, res) => {
   const { phoneNumber, network, bundleId, voucherCode } = req.body;
   const email = req.userEmail;
 
-  if (!voucherCode) {
-    return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
-  }
   if (!phoneNumber || !isValidPhone(phoneNumber)) {
     return res.status(400).json({ error: "Enter a valid Nigerian phone number." });
   }
@@ -1355,11 +1462,18 @@ app.post('/api/transactions/data', authenticateToken, (req: any, res) => {
   }
 
   const db = readDb();
-  if (!isVoucherValid(voucherCode, db)) {
-    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+  const user = db.users[req.userIndex];
+
+  if (!user.wdvVerified) {
+    if (!voucherCode) {
+      return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
+    }
+    const activation = activateVoucherAndVerifyUser(voucherCode, email, db);
+    if (activation.error) {
+      return res.status(400).json({ error: activation.error });
+    }
   }
 
-  const user = db.users[req.userIndex];
   const price = plan.price;
 
   if (user.balance < price) {
@@ -1408,17 +1522,10 @@ app.post('/api/transactions/data', authenticateToken, (req: any, res) => {
   user.notifications.unshift({
     id: `notif-${Date.now()}`,
     title: 'Data Purchase Successful',
-    body: `Successfully purchased ${plan.size} data bundle for ${phoneNumber}. WDV voucher used.`,
+    body: `Successfully purchased ${plan.size} data bundle for ${phoneNumber}. WDV Verified.`,
     date: new Date().toISOString(),
     unread: true
   });
-
-  // Mark voucher as used
-  const normVoucher = voucherCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const vIndex = db.vouchers.findIndex((v: any) => v.code.toUpperCase().replace(/[^A-Z0-9]/g, '') === normVoucher);
-  if (vIndex !== -1) {
-    db.vouchers[vIndex].status = 'used';
-  }
 
   writeDb(db);
   logDiagnostic('INFO', 'Data purchase complete', { email, amount: price, phoneNumber });
@@ -1435,9 +1542,6 @@ app.post('/api/transactions/transfer', authenticateToken, async (req: any, res) 
   const { bank, accountNumber, amount, voucherCode, accountName } = req.body;
   const email = req.userEmail;
 
-  if (!voucherCode) {
-    return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
-  }
   if (!bank) {
     return res.status(400).json({ error: "Please select a bank." });
   }
@@ -1452,13 +1556,19 @@ app.post('/api/transactions/transfer', authenticateToken, async (req: any, res) 
   }
 
   const db = readDb();
-  if (!isVoucherValid(voucherCode, db)) {
-    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+  const user = db.users[req.userIndex];
+
+  if (!user.wdvVerified && !user.isWdvVerified) {
+    if (!voucherCode) {
+      return res.status(400).json({ error: "Your account is not verified. Please activate a master WDV voucher in your dashboard or quick actions to proceed." });
+    }
+    const activation = activateVoucherAndVerifyUser(voucherCode, email, db);
+    if (activation.error) {
+      return res.status(400).json({ error: activation.error });
+    }
   }
 
   const resolvedName = accountName.trim();
-
-  const user = db.users[req.userIndex];
   const price = Number(amount);
 
   if (user.balance < price) {
@@ -1536,9 +1646,6 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
   const { bank, accountNumber, amount, voucherCode, accountName } = req.body;
   const email = req.userEmail;
 
-  if (!voucherCode) {
-    return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
-  }
   if (!bank) {
     return res.status(400).json({ error: "Please select a bank." });
   }
@@ -1553,13 +1660,19 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
   }
 
   const db = readDb();
-  if (!isVoucherValid(voucherCode, db)) {
-    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+  const user = db.users[req.userIndex];
+
+  if (!user.wdvVerified) {
+    if (!voucherCode) {
+      return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
+    }
+    const activation = activateVoucherAndVerifyUser(voucherCode, email, db);
+    if (activation.error) {
+      return res.status(400).json({ error: activation.error });
+    }
   }
 
   const resolvedName = accountName.trim();
-
-  const user = db.users[req.userIndex];
   const price = Number(amount);
 
   if (user.balance < price) {
@@ -1609,17 +1722,10 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
   user.notifications.unshift({
     id: `notif-${Date.now()}`,
     title: 'Withdrawal Successful',
-    body: `₦${price.toLocaleString()} withdrawn to ${resolvedName} (${bank}). WDV voucher used.`,
+    body: `₦${price.toLocaleString()} withdrawn to ${resolvedName} (${bank}). WDV Verified.`,
     date: new Date().toISOString(),
     unread: true
   });
-
-  // Mark voucher as used
-  const normVoucher = voucherCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const vIndex = db.vouchers.findIndex((v: any) => v.code.toUpperCase().replace(/[^A-Z0-9]/g, '') === normVoucher);
-  if (vIndex !== -1) {
-    db.vouchers[vIndex].status = 'used';
-  }
 
   writeDb(db);
   logDiagnostic('INFO', 'Withdrawal complete', { email, amount: price, accountNumber });

@@ -143,7 +143,8 @@ function getJsonDb(): JsonData {
         phonebeneficiaries: safeStringifyJsonField(u.phonebeneficiaries || u.phoneBeneficiaries),
         loginhistory: safeStringifyJsonField(u.loginhistory || u.loginHistory),
         notifications: safeStringifyJsonField(u.notifications),
-        transactions: safeStringifyJsonField(u.transactions)
+        transactions: safeStringifyJsonField(u.transactions),
+        iswdvverified: u.isWdvVerified || u.iswdvverified ? 1 : 0
       })),
       vouchers: (parsed.vouchers || []).map((v: any) => ({
         code: v.code,
@@ -277,9 +278,21 @@ export async function initDb() {
       phoneBeneficiaries TEXT,
       loginHistory TEXT,
       notifications TEXT,
-      transactions TEXT
+      transactions TEXT,
+      wdvVerified INTEGER DEFAULT 0,
+      isWdvVerified INTEGER DEFAULT 0
     )
   `);
+
+  try {
+    await execute(`ALTER TABLE users ADD COLUMN IF NOT EXISTS wdvVerified INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE users ADD COLUMN IF NOT EXISTS isWdvVerified INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS redeemedBy TEXT DEFAULT '[]'`);
+  } catch (e) {}
 
   await execute(`
     CREATE TABLE IF NOT EXISTS wallets (
@@ -400,9 +413,22 @@ export async function initDb() {
       amount REAL,
       status TEXT,
       usedBy TEXT,
-      usedAt TEXT
+      usedAt TEXT,
+      redeemedBy TEXT DEFAULT '[]'
     )
   `);
+
+  // Run ALTER TABLE migrations for existing databases
+  try {
+    await execute(`ALTER TABLE users ADD COLUMN wdvVerified INTEGER DEFAULT 0`);
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    await execute(`ALTER TABLE vouchers ADD COLUMN redeemedBy TEXT DEFAULT '[]'`);
+  } catch (e) {
+    // Column already exists
+  }
 
   await execute(`
     CREATE TABLE IF NOT EXISTS password_resets (
@@ -573,7 +599,9 @@ export function execute(sql: string, params: any[] = []): Promise<any> {
             phonebeneficiaries: params[18] || '[]',
             loginhistory: params[19] || '[]',
             notifications: params[20] || '[]',
-            transactions: params[21] || '[]'
+            transactions: params[21] || '[]',
+            wdvverified: Number(params[22] ?? 0),
+            iswdvverified: Number(params[23] ?? 0)
           };
           db.users = db.users.filter(x => x.email !== u.email);
           db.users.push(u);

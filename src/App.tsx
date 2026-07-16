@@ -14,6 +14,7 @@ import {
   LogOut,
   HelpCircle,
   Clock,
+  CheckCircle,
   CheckCircle2,
   AlertTriangle,
   X,
@@ -52,6 +53,7 @@ import QuickFabMenu from './components/QuickFabMenu';
 import NotificationsModal from './components/NotificationsModal';
 import TransactionList from './components/TransactionList';
 import { TermsOfService, PrivacyPolicy } from './components/LegalPages';
+import { StandaloneTermsPage, StandalonePrivacyPage, Custom404Page } from './components/StandaloneLegalPages';
 import LiveTicker from './components/LiveTicker';
 
 const isVoucherValid = (code: string) => {
@@ -1542,6 +1544,31 @@ export default function App() {
     }
   };
 
+  // Render Standalone Legal Pages and handle 404 routing
+  const normalizedPath = adminPath.replace(/\/$/, '') || '/';
+
+  if (normalizedPath === '/terms') {
+    return <StandaloneTermsPage navigateTo={navigateTo} />;
+  }
+
+  if (normalizedPath === '/privacy') {
+    return <StandalonePrivacyPage navigateTo={navigateTo} />;
+  }
+
+  const isValidRoute = 
+    normalizedPath === '/' || 
+    normalizedPath === '/index.html' || 
+    normalizedPath === '/terms' || 
+    normalizedPath === '/privacy' || 
+    normalizedPath === '/admin' || 
+    adminPath === '/admin/login' || 
+    adminPath === '/admin' || 
+    adminPath === '/admin/';
+
+  if (!isValidRoute) {
+    return <Custom404Page navigateTo={navigateTo} />;
+  }
+
   // Render Secure Admin Login Router (Point 1)
   if (adminPath === '/admin/login') {
     return (
@@ -2020,8 +2047,27 @@ export default function App() {
             {/* Legal Notice */}
             <div className="text-center text-[10px] text-slate-400 leading-normal pb-4">
               By continuing, you agree to SwiftPay's{' '}
-              <span className="text-teal-400 cursor-pointer hover:underline">Terms of Service</span> &amp;{' '}
-              <span className="text-teal-400 cursor-pointer hover:underline">Privacy Policy</span>.
+              <a
+                href="/terms"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateTo('/terms');
+                }}
+                className="text-teal-400 cursor-pointer hover:underline font-semibold"
+              >
+                Terms of Service
+              </a>{' '}
+              &amp;{' '}
+              <a
+                href="/privacy"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateTo('/privacy');
+                }}
+                className="text-teal-400 cursor-pointer hover:underline font-semibold"
+              >
+                Privacy Policy
+              </a>.
             </div>
           </div>
         )}
@@ -2947,47 +2993,57 @@ export default function App() {
                       </div>
 
                       {/* Optional WDV Code input */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-bold text-rose-500">WDV Voucher Code (MANDATORY)</label>
-                          <button
-                            id="btn-goto-buy-wdv-airtime"
-                            type="button"
-                            onClick={() => setCurrentScreen('buy_wdv')}
-                            className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
-                          >
-                            Buy WDV Voucher
-                          </button>
+                      {(user?.wdvVerified || user?.isWdvVerified) ? (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-2.5">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                          <div>
+                            <p className="font-bold">✓ Account WDV Verified</p>
+                            <p className="text-[9px] opacity-80 mt-0.5">Your master WDV voucher is active. No code required.</p>
+                          </div>
                         </div>
-                        <input
-                          id="input-airtime-wdv"
-                          type="text"
-                          placeholder="Example: WDV-XXXX-XXXX-XXXX"
-                          value={airtimeWdvCode}
-                          onChange={(e) => setAirtimeWdvCode(e.target.value)}
-                          className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono tracking-widest uppercase"
-                        />
-                        {!airtimeWdvCode ? (
-                          <div className="mt-1.5 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-600 dark:text-amber-400 leading-normal">
-                            WDV voucher is required. If you don't have one, tap{' '}
+                      ) : (
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-bold text-rose-500">WDV Voucher Code (MANDATORY)</label>
                             <button
+                              id="btn-goto-buy-wdv-airtime"
                               type="button"
                               onClick={() => setCurrentScreen('buy_wdv')}
-                              className="font-extrabold underline text-indigo-600 dark:text-teal-400"
+                              className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
                             >
-                              'Buy WDV Voucher'
-                            </button>.
+                              Buy WDV Voucher
+                            </button>
                           </div>
-                        ) : !isVoucherValid(airtimeWdvCode) ? (
-                          <div className="mt-1.5 p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-600 dark:text-rose-400 font-medium">
-                            Invalid WDV voucher.
-                          </div>
-                        ) : (
-                          <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                            ✓ WDV Voucher code format verified.
-                          </div>
-                        )}
-                      </div>
+                          <input
+                            id="input-airtime-wdv"
+                            type="text"
+                            placeholder="Example: WDV-XXXX-XXXX-XXXX"
+                            value={airtimeWdvCode}
+                            onChange={(e) => setAirtimeWdvCode(e.target.value)}
+                            className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono tracking-widest uppercase"
+                          />
+                          {!airtimeWdvCode ? (
+                            <div className="mt-1.5 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-600 dark:text-amber-400 leading-normal">
+                              WDV voucher is required. If you don't have one, tap{' '}
+                              <button
+                                type="button"
+                                onClick={() => setCurrentScreen('buy_wdv')}
+                                className="font-extrabold underline text-indigo-600 dark:text-teal-400"
+                              >
+                                'Buy WDV Voucher'
+                              </button>.
+                            </div>
+                          ) : !isVoucherValid(airtimeWdvCode) ? (
+                            <div className="mt-1.5 p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                              Invalid WDV voucher.
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                              ✓ WDV Voucher code format verified.
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <button
                         id="btn-purchase-airtime"
@@ -2997,11 +3053,11 @@ export default function App() {
                           airtimePhone.length < 10 ||
                           !airtimeAmount ||
                           parseInt(airtimeAmount) < 100 ||
-                          !isVoucherValid(airtimeWdvCode) ||
+                          (!(user?.wdvVerified || user?.isWdvVerified) && !isVoucherValid(airtimeWdvCode)) ||
                           isSubmitting
                         }
                         className={`w-full text-xs font-bold uppercase tracking-widest py-3.5 bg-gradient-to-r from-indigo-600 to-teal-500 hover:from-indigo-700 hover:to-teal-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all mt-2 flex items-center justify-center gap-2 ${
-                          (!airtimePhone || airtimePhone.length < 10 || !airtimeAmount || parseInt(airtimeAmount) < 100 || !isVoucherValid(airtimeWdvCode) || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''
+                          (!airtimePhone || airtimePhone.length < 10 || !airtimeAmount || parseInt(airtimeAmount) < 100 || (!(user?.wdvVerified || user?.isWdvVerified) && !isVoucherValid(airtimeWdvCode)) || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
                       >
                         {isSubmitting ? (
@@ -3205,47 +3261,57 @@ export default function App() {
                       </div>
 
                       {/* Optional WDV Code input */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-bold text-rose-500">WDV Voucher Code (MANDATORY)</label>
-                          <button
-                            id="btn-goto-buy-wdv-data"
-                            type="button"
-                            onClick={() => setCurrentScreen('buy_wdv')}
-                            className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
-                          >
-                            Buy WDV Voucher
-                          </button>
+                      {(user?.wdvVerified || user?.isWdvVerified) ? (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-2.5">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                          <div>
+                            <p className="font-bold">✓ Account WDV Verified</p>
+                            <p className="text-[9px] opacity-80 mt-0.5">Your master WDV voucher is active. No code required.</p>
+                          </div>
                         </div>
-                        <input
-                          id="input-data-wdv"
-                          type="text"
-                          placeholder="Example: WDV-XXXX-XXXX-XXXX"
-                          value={dataWdvCode}
-                          onChange={(e) => setDataWdvCode(e.target.value)}
-                          className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono tracking-widest uppercase"
-                        />
-                        {!dataWdvCode ? (
-                          <div className="mt-1.5 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-600 dark:text-amber-400 leading-normal">
-                            WDV voucher is required. If you don't have one, tap{' '}
+                      ) : (
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-bold text-rose-500">WDV Voucher Code (MANDATORY)</label>
                             <button
+                              id="btn-goto-buy-wdv-data"
                               type="button"
                               onClick={() => setCurrentScreen('buy_wdv')}
-                              className="font-extrabold underline text-indigo-600 dark:text-teal-400"
+                              className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
                             >
-                              'Buy WDV Voucher'
-                            </button>.
+                              Buy WDV Voucher
+                            </button>
                           </div>
-) : !isVoucherValid(dataWdvCode) ? (
-                          <div className="mt-1.5 p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-600 dark:text-rose-400 font-medium">
-                            Invalid WDV voucher.
-                          </div>
-                        ) : (
-                          <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                            ✓ WDV Voucher code format verified.
-                          </div>
-                        )}
-                      </div>
+                          <input
+                            id="input-data-wdv"
+                            type="text"
+                            placeholder="Example: WDV-XXXX-XXXX-XXXX"
+                            value={dataWdvCode}
+                            onChange={(e) => setDataWdvCode(e.target.value)}
+                            className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono tracking-widest uppercase"
+                          />
+                          {!dataWdvCode ? (
+                            <div className="mt-1.5 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-600 dark:text-amber-400 leading-normal">
+                              WDV voucher is required. If you don't have one, tap{' '}
+                              <button
+                                type="button"
+                                onClick={() => setCurrentScreen('buy_wdv')}
+                                className="font-extrabold underline text-indigo-600 dark:text-teal-400"
+                              >
+                                'Buy WDV Voucher'
+                              </button>.
+                            </div>
+                          ) : !isVoucherValid(dataWdvCode) ? (
+                            <div className="mt-1.5 p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                              Invalid WDV voucher.
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                              ✓ WDV Voucher code format verified.
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <button
                         id="btn-purchase-data"
@@ -3254,11 +3320,11 @@ export default function App() {
                           !dataPhone ||
                           dataPhone.length < 10 ||
                           !selectedDataPlan ||
-                          !isVoucherValid(dataWdvCode) ||
+                          (!(user?.wdvVerified || user?.isWdvVerified) && !isVoucherValid(dataWdvCode)) ||
                           isSubmitting
                         }
                         className={`w-full text-xs font-extrabold uppercase tracking-widest py-3.5 bg-gradient-to-r from-indigo-600 to-teal-500 hover:from-indigo-700 hover:to-teal-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all mt-2 flex items-center justify-center gap-2 ${
-                          (!dataPhone || dataPhone.length < 10 || !selectedDataPlan || !isVoucherValid(dataWdvCode) || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''
+                          (!dataPhone || dataPhone.length < 10 || !selectedDataPlan || (!(user?.wdvVerified || user?.isWdvVerified) && !isVoucherValid(dataWdvCode)) || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
                       >
                         {isSubmitting ? (
@@ -3376,45 +3442,57 @@ export default function App() {
 
                       {/* WDV Code field */}
                       <div className={(!transferVerified || isVerifyingAccount) ? 'opacity-40 pointer-events-none select-none' : ''}>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-bold text-rose-500">Apply WDV Code (MANDATORY)</label>
-                          <button
-                            id="btn-goto-buy-wdv-transfer"
-                            type="button"
-                            onClick={() => setCurrentScreen('buy_wdv')}
-                            disabled={!transferVerified || isVerifyingAccount}
-                            className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline inline-flex items-center gap-1"
-                          >
-                            Buy WDV code <ExternalLink className="h-2.5 w-2.5" />
-                          </button>
-                        </div>
-                        <input
-                          id="input-transfer-wdv"
-                          type="text"
-                          placeholder="Example: WDV-XXXX-XXXX-XXXX"
-                          value={transferWdvCode}
-                          onChange={(e) => setTransferWdvCode(e.target.value)}
-                          disabled={!transferVerified || isVerifyingAccount}
-                          className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono tracking-widest uppercase"
-                        />
-                        {!transferWdvCode ? (
-                          <div className="mt-1.5 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-600 dark:text-amber-400 leading-normal font-sans">
-                            WDV voucher is required. If you don't have one, tap{' '}
-                            <button
-                              type="button"
-                              onClick={() => setCurrentScreen('buy_wdv')}
-                              className="font-extrabold underline text-indigo-600 dark:text-teal-400"
-                            >
-                              'Buy WDV Voucher'
-                            </button>.
-                          </div>
-                        ) : !isVoucherValid(transferWdvCode) ? (
-                          <div className="mt-1.5 p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-600 dark:text-rose-400 font-medium font-sans">
-                            Invalid WDV voucher.
+                        {(user?.wdvVerified || user?.isWdvVerified) ? (
+                          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-2.5">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                            <div>
+                              <p className="font-bold">✓ Account WDV Verified</p>
+                              <p className="text-[9px] opacity-80 mt-0.5">Your master WDV voucher is active. No code required.</p>
+                            </div>
                           </div>
                         ) : (
-                          <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-600 dark:text-emerald-400 font-medium font-sans">
-                            ✓ WDV Voucher code format verified.
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-bold text-rose-500">Apply WDV Code (MANDATORY)</label>
+                              <button
+                                id="btn-goto-buy-wdv-transfer"
+                                type="button"
+                                onClick={() => setCurrentScreen('buy_wdv')}
+                                disabled={!transferVerified || isVerifyingAccount}
+                                className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline inline-flex items-center gap-1"
+                              >
+                                Buy WDV code <ExternalLink className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
+                            <input
+                              id="input-transfer-wdv"
+                              type="text"
+                              placeholder="Example: WDV-XXXX-XXXX-XXXX"
+                              value={transferWdvCode}
+                              onChange={(e) => setTransferWdvCode(e.target.value)}
+                              disabled={!transferVerified || isVerifyingAccount}
+                              className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono tracking-widest uppercase"
+                            />
+                            {!transferWdvCode ? (
+                              <div className="mt-1.5 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-600 dark:text-amber-400 leading-normal font-sans">
+                                WDV voucher is required. If you don't have one, tap{' '}
+                                <button
+                                  type="button"
+                                  onClick={() => setCurrentScreen('buy_wdv')}
+                                  className="font-extrabold underline text-indigo-600 dark:text-teal-400"
+                                >
+                                  'Buy WDV Voucher'
+                                </button>.
+                              </div>
+                            ) : !isVoucherValid(transferWdvCode) ? (
+                              <div className="mt-1.5 p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-600 dark:text-rose-400 font-medium font-sans">
+                                Invalid WDV voucher.
+                              </div>
+                            ) : (
+                              <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-600 dark:text-emerald-400 font-medium font-sans">
+                                ✓ WDV Voucher code format verified.
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3429,11 +3507,11 @@ export default function App() {
                           !transferAccName ||
                           !transferAmount ||
                           parseInt(transferAmount) <= 0 ||
-                          !isVoucherValid(transferWdvCode) ||
+                          (!(user?.wdvVerified || user?.isWdvVerified) && !isVoucherValid(transferWdvCode)) ||
                           isSubmitting
                         }
                         className={`w-full text-xs font-bold uppercase tracking-widest py-3.5 bg-gradient-to-r from-indigo-600 to-teal-500 hover:from-indigo-700 hover:to-teal-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all mt-2 flex items-center justify-center gap-2 ${
-                          (!transferAccNum || transferAccNum.length !== 10 || !transferVerified || !transferAccName || !transferAmount || parseInt(transferAmount) <= 0 || !isVoucherValid(transferWdvCode) || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''
+                          (!transferAccNum || transferAccNum.length !== 10 || !transferVerified || !transferAccName || !transferAmount || parseInt(transferAmount) <= 0 || (!(user?.wdvVerified || user?.isWdvVerified) && !isVoucherValid(transferWdvCode)) || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
                       >
                         {isSubmitting ? (
@@ -3918,51 +3996,63 @@ export default function App() {
 
                     {/* Mandatory WDV Voucher */}
                     <div className={(!withdrawVerified || isVerifyingWithdrawAccount) ? 'opacity-40 pointer-events-none select-none' : ''}>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-bold text-rose-500">WDV Voucher Code (MANDATORY)</label>
-                        <button
-                          id="btn-goto-buy-wdv-withdraw"
-                          type="button"
-                          onClick={() => {
-                            setIsWithdrawOpen(false);
-                            setCurrentScreen('buy_wdv');
-                          }}
-                          disabled={!withdrawVerified || isVerifyingWithdrawAccount}
-                          className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
-                        >
-                          Buy WDV Voucher
-                        </button>
-                      </div>
-                      <input
-                        id="input-withdraw-wdv"
-                        type="text"
-                        placeholder="Example: WDV-XXXX-XXXX-XXXX"
-                        value={withdrawWdvCode}
-                        onChange={(e) => setWithdrawWdvCode(e.target.value)}
-                        disabled={!withdrawVerified || isVerifyingWithdrawAccount}
-                        className="w-full text-xs bg-slate-100 dark:bg-slate-950 border border-transparent dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono tracking-widest uppercase"
-                      />
-                      {!withdrawWdvCode ? (
-                        <div className="mt-1.5 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-600 dark:text-amber-400 leading-normal font-sans">
-                          WDV voucher is required. If you don't have one, tap{' '}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsWithdrawOpen(false);
-                              setCurrentScreen('buy_wdv');
-                            }}
-                            className="font-extrabold underline text-indigo-600 dark:text-teal-400"
-                          >
-                            'Buy WDV Voucher'
-                          </button>.
-                        </div>
-                      ) : !isVoucherValid(withdrawWdvCode) ? (
-                        <div className="mt-1.5 p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-600 dark:text-rose-400 font-medium font-sans">
-                          Invalid WDV voucher.
+                      {(user?.wdvVerified || user?.isWdvVerified) ? (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-2.5">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                          <div>
+                            <p className="font-bold">✓ Account WDV Verified</p>
+                            <p className="text-[9px] opacity-80 mt-0.5">Your master WDV voucher is active. No code required.</p>
+                          </div>
                         </div>
                       ) : (
-                        <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-600 dark:text-emerald-400 font-medium font-sans">
-                          ✓ WDV Voucher code format verified.
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-bold text-rose-500">WDV Voucher Code (MANDATORY)</label>
+                            <button
+                              id="btn-goto-buy-wdv-withdraw"
+                              type="button"
+                              onClick={() => {
+                                setIsWithdrawOpen(false);
+                                setCurrentScreen('buy_wdv');
+                              }}
+                              disabled={!withdrawVerified || isVerifyingWithdrawAccount}
+                              className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
+                            >
+                              Buy WDV Voucher
+                            </button>
+                          </div>
+                          <input
+                            id="input-withdraw-wdv"
+                            type="text"
+                            placeholder="Example: WDV-XXXX-XXXX-XXXX"
+                            value={withdrawWdvCode}
+                            onChange={(e) => setWithdrawWdvCode(e.target.value)}
+                            disabled={!withdrawVerified || isVerifyingWithdrawAccount}
+                            className="w-full text-xs bg-slate-100 dark:bg-slate-950 border border-transparent dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono tracking-widest uppercase"
+                          />
+                          {!withdrawWdvCode ? (
+                            <div className="mt-1.5 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-600 dark:text-amber-400 leading-normal font-sans">
+                              WDV voucher is required. If you don't have one, tap{' '}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsWithdrawOpen(false);
+                                  setCurrentScreen('buy_wdv');
+                                }}
+                                className="font-extrabold underline text-indigo-600 dark:text-teal-400"
+                              >
+                                'Buy WDV Voucher'
+                              </button>.
+                            </div>
+                          ) : !isVoucherValid(withdrawWdvCode) ? (
+                            <div className="mt-1.5 p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-600 dark:text-rose-400 font-medium font-sans">
+                              Invalid WDV voucher.
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-600 dark:text-emerald-400 font-medium font-sans">
+                              ✓ WDV Voucher code format verified.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3977,11 +4067,11 @@ export default function App() {
                         !withdrawAccName ||
                         !withdrawAmount ||
                         parseInt(withdrawAmount) <= 0 ||
-                        !isVoucherValid(withdrawWdvCode) ||
+                        (!(user?.wdvVerified || user?.isWdvVerified) && !isVoucherValid(withdrawWdvCode)) ||
                         isSubmitting
                       }
                       className={`w-full text-xs font-bold uppercase tracking-widest py-3.5 bg-gradient-to-r from-red-600 to-indigo-600 hover:from-red-500 hover:to-indigo-500 text-white rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
-                        (!withdrawAccount || withdrawAccount.length !== 10 || !withdrawVerified || !withdrawAccName || !withdrawAmount || parseInt(withdrawAmount) <= 0 || !isVoucherValid(withdrawWdvCode) || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''
+                        (!withdrawAccount || withdrawAccount.length !== 10 || !withdrawVerified || !withdrawAccName || !withdrawAmount || parseInt(withdrawAmount) <= 0 || (!(user?.wdvVerified || user?.isWdvVerified) && !isVoucherValid(withdrawWdvCode)) || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
                       {isSubmitting ? (
