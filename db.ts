@@ -144,7 +144,8 @@ function getJsonDb(): JsonData {
         loginhistory: safeStringifyJsonField(u.loginhistory || u.loginHistory),
         notifications: safeStringifyJsonField(u.notifications),
         transactions: safeStringifyJsonField(u.transactions),
-        iswdvverified: u.isWdvVerified || u.iswdvverified ? 1 : 0
+        iswdvverified: u.isWdvVerified || u.iswdvverified ? 1 : 0,
+        welcomerewardshown: u.welcomeRewardShown || u.welcomerewardshown ? 1 : 0
       })),
       vouchers: (parsed.vouchers || []).map((v: any) => ({
         code: v.code,
@@ -280,7 +281,8 @@ export async function initDb() {
       notifications TEXT,
       transactions TEXT,
       wdvVerified INTEGER DEFAULT 0,
-      isWdvVerified INTEGER DEFAULT 0
+      isWdvVerified INTEGER DEFAULT 0,
+      welcomeRewardShown INTEGER DEFAULT 0
     )
   `);
 
@@ -289,6 +291,9 @@ export async function initDb() {
   } catch (e) {}
   try {
     await execute(`ALTER TABLE users ADD COLUMN IF NOT EXISTS isWdvVerified INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE users ADD COLUMN IF NOT EXISTS welcomeRewardShown INTEGER DEFAULT 0`);
   } catch (e) {}
   try {
     await execute(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS redeemedBy TEXT DEFAULT '[]'`);

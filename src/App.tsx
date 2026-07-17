@@ -46,6 +46,7 @@ import {
 } from './data';
 
 import GlassCard from './components/GlassCard';
+import CongratulationsScreen from './components/CongratulationsScreen';
 import NumericPad from './components/NumericPad';
 import BottomNav from './components/BottomNav';
 import WdvVoucher from './components/WdvVoucher';
@@ -1711,8 +1712,19 @@ export default function App() {
   }
 
   return (
-    // Outer Ambient background framing the phone simulator
-    <div className="min-h-screen bg-[#050507] [background:radial-gradient(circle_at_0%_0%,#1e1b4b_0%,#050507_50%),radial-gradient(circle_at_100%_100%,#0d9488_0%,#050507_50%)] text-white flex flex-col items-center justify-center p-4 md:p-6 font-sans overflow-x-hidden md:overflow-visible">
+    <>
+      {isAuthenticated && user && user.welcomeRewardShown === false && (
+        <CongratulationsScreen
+          userEmail={user.email}
+          onContinue={() => {
+            setUser({ ...user, welcomeRewardShown: true });
+            setCurrentScreen('dashboard');
+            showToast('Welcome reward activated!', 'success');
+          }}
+        />
+      )}
+      {/* Outer Ambient background framing the phone simulator */}
+      <div className="min-h-screen bg-[#050507] [background:radial-gradient(circle_at_0%_0%,#1e1b4b_0%,#050507_50%),radial-gradient(circle_at_100%_100%,#0d9488_0%,#050507_50%)] text-white flex flex-col items-center justify-center p-4 md:p-6 font-sans overflow-x-hidden md:overflow-visible">
       
       {/* Decorative desktop titles (Hidden on mobile) */}
       <div className="hidden md:flex flex-col items-center mb-6 text-center">
@@ -4332,5 +4344,6 @@ export default function App() {
         SwiftPay © 2026. All transaction logs and WDV keys are fully persisted in secure database.
       </div>
     </div>
+    </>
   );
 }

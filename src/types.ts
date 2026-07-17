@@ -13,6 +13,7 @@ export interface User {
   isFrozen?: boolean;
   tier?: number; // Verification tier, e.g. 1, 2, 3
   is2faEnabled?: boolean;
+  welcomeRewardShown?: boolean;
 }
 
 export type WdvStatus = 'unused' | 'redeemed';
@@ -35,7 +36,8 @@ export type TransactionType =
   | 'redeem_airtime'
   | 'redeem_data'
   | 'redeem_transfer'
-  | 'bank_transfer_direct';
+  | 'bank_transfer_direct'
+  | 'promotional_bonus';
 
 export interface Transaction {
   id: string;

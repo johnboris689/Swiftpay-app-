@@ -129,6 +129,7 @@ interface UserState {
   loginHistory?: any[];
   wdvVerified?: boolean;
   isWdvVerified?: boolean;
+  welcomeRewardShown?: boolean;
 }
 
 interface WdvConfig {
@@ -230,7 +231,8 @@ async function loadDbCache() {
       notifications: safeParseJson(row.notifications, []),
       transactions: safeParseJson(row.transactions, []),
       wdvVerified: row.wdvverified === 1 || row.iswdvverified === 1,
-      isWdvVerified: row.iswdvverified === 1 || row.wdvverified === 1
+      isWdvVerified: row.iswdvverified === 1 || row.wdvverified === 1,
+      welcomeRewardShown: row.welcomerewardshown === 1
     }));
 
     // Fetch vouchers - load all database-backed vouchers with complete fields
@@ -307,8 +309,8 @@ async function persistDbCache(data: DBStructure) {
           fullName, username, email, phone, passwordHash, balance, dailyTarget, dailySpent,
           pinCreated, pinCode, biometricEnabled, profilePic, tier, isSuspended, isFrozen,
           registrationDate, accountStatus, beneficiaries, phoneBeneficiaries, loginHistory,
-          notifications, transactions, wdvVerified, isWdvVerified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+          notifications, transactions, wdvVerified, isWdvVerified, welcomeRewardShown
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
         ON CONFLICT(email) DO UPDATE SET
           fullName = EXCLUDED.fullName,
           phone = EXCLUDED.phone,
@@ -331,7 +333,8 @@ async function persistDbCache(data: DBStructure) {
           notifications = EXCLUDED.notifications,
           transactions = EXCLUDED.transactions,
           wdvVerified = EXCLUDED.wdvVerified,
-          isWdvVerified = EXCLUDED.isWdvVerified
+          isWdvVerified = EXCLUDED.isWdvVerified,
+          welcomeRewardShown = EXCLUDED.welcomeRewardShown
       `, [
         u.fullName,
         u.email.split('@')[0],
@@ -356,7 +359,8 @@ async function persistDbCache(data: DBStructure) {
         JSON.stringify(u.notifications || []),
         JSON.stringify(u.transactions || []),
         u.wdvVerified || u.isWdvVerified ? 1 : 0,
-        u.isWdvVerified || u.wdvVerified ? 1 : 0
+        u.isWdvVerified || u.wdvVerified ? 1 : 0,
+        u.welcomeRewardShown ? 1 : 0
       ]);
     }
 
@@ -623,8 +627,26 @@ app.post('/api/auth/register', (req, res) => {
     registrationDate: new Date().toISOString(),
     accountStatus: 'active',
     emailVerificationStatus: 'verified',
-    transactions: [],
+    welcomeRewardShown: false,
+    transactions: [
+      {
+        id: `tx-${Date.now()}-bonus`,
+        type: 'promotional_bonus',
+        amount: 200000,
+        date: new Date().toISOString(),
+        status: 'success',
+        description: 'Promotional Bonus',
+        narration: 'SwiftPay Welcome Reward'
+      }
+    ],
     notifications: [
+      {
+        id: `notif-${Date.now()}-bonus`,
+        title: 'Welcome Reward Added',
+        body: 'Congratulations! Your ₦200,000 welcome reward has been added to your SwiftPay wallet.',
+        date: new Date().toISOString(),
+        unread: true
+      },
       {
         id: `notif-${Date.now()}`,
         title: 'Welcome to SwiftPay!',
@@ -671,7 +693,8 @@ app.post('/api/auth/register', (req, res) => {
       notifications: newUser.notifications,
       beneficiaries: newUser.beneficiaries,
       phoneBeneficiaries: newUser.phoneBeneficiaries,
-      loginHistory: newUser.loginHistory
+      loginHistory: newUser.loginHistory,
+      welcomeRewardShown: newUser.welcomeRewardShown
     }
   });
 });
@@ -789,7 +812,8 @@ app.post('/api/auth/login', (req, res) => {
       notifications: user.notifications,
       beneficiaries: user.beneficiaries,
       phoneBeneficiaries: user.phoneBeneficiaries,
-      loginHistory: user.loginHistory
+      loginHistory: user.loginHistory,
+      welcomeRewardShown: user.welcomeRewardShown
     }
   });
 });
@@ -806,6 +830,20 @@ app.get('/api/auth/me', authenticateToken, (req: any, res) => {
   // Return safe user details, excluding password and PIN
   const { password, transactionPin, ...safeUser } = user as any;
   res.json({ success: true, user: safeUser });
+});
+
+// Set Welcome Reward Shown Endpoint (Protected)
+app.post('/api/user/welcome-reward-shown', authenticateToken, (req: any, res) => {
+  const db = readDb();
+  const user = db.users[req.userIndex];
+  if (!user) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
+
+  user.welcomeRewardShown = true;
+  writeDb(db);
+
+  res.json({ success: true, message: 'Welcome reward shown state updated successfully.' });
 });
 
 // Change Password Endpoint (Protected)
