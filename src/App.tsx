@@ -129,6 +129,7 @@ export default function App() {
   const [adminEmailInput, setAdminEmailInput] = useState('');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [isAdminSubmitting, setIsAdminSubmitting] = useState(false);
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
 
   const handleAdminLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -665,6 +666,7 @@ export default function App() {
   // Onboarding registration via Express backend
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAuthSubmitting) return;
     if (!fullName || !email || !password) {
       showToast('Please fill out all fields', 'error');
       return;
@@ -678,6 +680,7 @@ export default function App() {
       return;
     }
 
+    setIsAuthSubmitting(true);
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -701,17 +704,21 @@ export default function App() {
     } catch (err) {
       console.error('Registration error:', err);
       showToast('Network error during registration.', 'error');
+    } finally {
+      setIsAuthSubmitting(false);
     }
   };
 
   // Onboarding Login via Express backend
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAuthSubmitting) return;
     if (!email || !password) {
       showToast('Please enter your credentials', 'error');
       return;
     }
 
+    setIsAuthSubmitting(true);
     try {
        const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -735,6 +742,8 @@ export default function App() {
     } catch (err) {
       console.error('Login error:', err);
       showToast('Network error during login.', 'error');
+    } finally {
+      setIsAuthSubmitting(false);
     }
   };
 
@@ -1907,9 +1916,20 @@ export default function App() {
                       <button
                         id="btn-auth-submit"
                         type="submit"
-                        className="w-full text-xs font-bold uppercase tracking-widest py-3 bg-gradient-to-r from-indigo-500 via-violet-500 to-teal-500 hover:from-indigo-600 hover:to-teal-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all mt-2"
+                        disabled={isAuthSubmitting}
+                        className="w-full text-xs font-bold uppercase tracking-widest py-3 bg-gradient-to-r from-indigo-500 via-violet-500 to-teal-500 hover:from-indigo-600 hover:to-teal-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all mt-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {authMode === 'signup' ? 'Create Account' : 'Sign In'}
+                        {isAuthSubmitting ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            {authMode === 'signup' ? 'Creating Account...' : 'Signing In...'}
+                          </>
+                        ) : (
+                          authMode === 'signup' ? 'Create Account' : 'Sign In'
+                        )}
                       </button>
                     </form>
                   </>
