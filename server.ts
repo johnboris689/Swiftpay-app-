@@ -1225,6 +1225,49 @@ const BANK_NAME_TO_CODE: Record<string, string> = {
 
 const MASTER_WDV_CODES = ['WDV-7674-2206-6501', 'WDV-9001-3029-8675'];
 
+async function verifyAndConsumeVoucherSql(voucherCode: string | undefined, email: string, transactionId: string): Promise<{ error?: string }> {
+  const norm = (voucherCode || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!norm) {
+    return { error: "Please enter a WDV voucher code." };
+  }
+
+  const isPostgres = !!process.env.DATABASE_URL || !!process.env.SQL_HOST;
+  let voucher;
+  try {
+    if (isPostgres) {
+      voucher = await getRow(`SELECT * FROM vouchers WHERE UPPER(REPLACE(voucherCode, '-', '')) = $1 FOR UPDATE`, [norm]);
+    } else {
+      voucher = await getRow(`SELECT * FROM vouchers WHERE UPPER(REPLACE(voucherCode, '-', '')) = $1`, [norm]);
+    }
+  } catch (err: any) {
+    console.error('Error selecting voucher in verification:', err);
+  }
+
+  if (!voucher) {
+    return { error: "Invalid WDV voucher." };
+  }
+
+  if (voucher.status !== 'unused') {
+    return { error: "Invalid or already used WDV voucher." };
+  }
+
+  const now = new Date().toISOString();
+  try {
+    await execute(`
+      UPDATE vouchers
+      SET status = $1, usedAt = $2, usedBy = $3, withdrawalId = $4
+      WHERE id = $5 OR voucherCode = $6 OR code = $7
+    `, ['used', now, email.toLowerCase(), transactionId, voucher.id, voucher.vouchercode || voucher.code || voucher.voucherCode, voucher.vouchercode || voucher.code || voucher.voucherCode]);
+  } catch (err: any) {
+    console.error('Error updating voucher status in SQL:', err);
+    return { error: "Failed to consume voucher in SQL database." };
+  }
+
+  await loadDbCache();
+
+  return {}; // Success
+}
+
 const isVoucherValid = (code: string | undefined, db: DBStructure, email?: string): boolean => {
   if (!code) return false;
   const norm = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -1337,7 +1380,7 @@ app.post('/api/auth/activate-voucher', authenticateToken, (req: any, res) => {
 });
 
 // Transaction endpoint for Airtime Purchase
-app.post('/api/transactions/airtime', authenticateToken, (req: any, res) => {
+app.post('/api/transactions/airtime', authenticateToken, async (req: any, res) => {
   const { phoneNumber, network, amount, voucherCode } = req.body;
   const email = req.userEmail;
 
@@ -1353,16 +1396,6 @@ app.post('/api/transactions/airtime', authenticateToken, (req: any, res) => {
 
   const db = readDb();
   const user = db.users[req.userIndex];
-
-  if (!user.wdvVerified) {
-    if (!voucherCode) {
-      return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
-    }
-    const activation = activateVoucherAndVerifyUser(voucherCode, email, db);
-    if (activation.error) {
-      return res.status(400).json({ error: activation.error });
-    }
-  }
 
   const price = Number(amount);
 
@@ -1385,14 +1418,25 @@ app.post('/api/transactions/airtime', authenticateToken, (req: any, res) => {
     return res.status(400).json({ error: "Duplicate transaction detected. Please wait 10 seconds." });
   }
 
-  const balanceBefore = user.balance;
-  user.balance -= price;
-  const balanceAfter = user.balance;
+  const txId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+  // VERIFY AND CONSUME VOUCHER IN SQL
+  const voucherResult = await verifyAndConsumeVoucherSql(voucherCode, email, txId);
+  if (voucherResult.error) {
+    return res.status(400).json({ error: voucherResult.error });
+  }
+
+  const refreshedDb = readDb();
+  const refreshedUser = refreshedDb.users[req.userIndex];
+
+  const balanceBefore = refreshedUser.balance;
+  refreshedUser.balance -= price;
+  const balanceAfter = refreshedUser.balance;
   const refNum = `REF-${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-  user.transactions = user.transactions || [];
+  refreshedUser.transactions = refreshedUser.transactions || [];
   const newTx = {
-    id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    id: txId,
     userId: email,
     type: 'redeem_airtime',
     amount: price,
@@ -1406,10 +1450,10 @@ app.post('/api/transactions/airtime', authenticateToken, (req: any, res) => {
     refNum,
     voucherCode
   };
-  user.transactions.unshift(newTx);
+  refreshedUser.transactions.unshift(newTx);
 
-  user.notifications = user.notifications || [];
-  user.notifications.unshift({
+  refreshedUser.notifications = refreshedUser.notifications || [];
+  refreshedUser.notifications.unshift({
     id: `notif-${Date.now()}`,
     title: 'Airtime Purchase Successful',
     body: `Successfully purchased ₦${price.toLocaleString()} airtime for ${phoneNumber}. WDV Verified.`,
@@ -1417,18 +1461,18 @@ app.post('/api/transactions/airtime', authenticateToken, (req: any, res) => {
     unread: true
   });
 
-  writeDb(db);
+  writeDb(refreshedDb);
   logDiagnostic('INFO', 'Airtime purchase complete', { email, amount: price, phoneNumber });
 
   res.json({
     success: true,
-    balance: user.balance,
+    balance: refreshedUser.balance,
     transaction: newTx
   });
 });
 
 // Transaction endpoint for Data Purchase
-app.post('/api/transactions/data', authenticateToken, (req: any, res) => {
+app.post('/api/transactions/data', authenticateToken, async (req: any, res) => {
   const { phoneNumber, network, bundleId, voucherCode } = req.body;
   const email = req.userEmail;
 
@@ -1492,16 +1536,6 @@ app.post('/api/transactions/data', authenticateToken, (req: any, res) => {
   const db = readDb();
   const user = db.users[req.userIndex];
 
-  if (!user.wdvVerified) {
-    if (!voucherCode) {
-      return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
-    }
-    const activation = activateVoucherAndVerifyUser(voucherCode, email, db);
-    if (activation.error) {
-      return res.status(400).json({ error: activation.error });
-    }
-  }
-
   const price = plan.price;
 
   if (user.balance < price) {
@@ -1523,14 +1557,25 @@ app.post('/api/transactions/data', authenticateToken, (req: any, res) => {
     return res.status(400).json({ error: "Duplicate transaction detected. Please wait 10 seconds." });
   }
 
-  const balanceBefore = user.balance;
-  user.balance -= price;
-  const balanceAfter = user.balance;
+  const txId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+  // VERIFY AND CONSUME VOUCHER IN SQL
+  const voucherResult = await verifyAndConsumeVoucherSql(voucherCode, email, txId);
+  if (voucherResult.error) {
+    return res.status(400).json({ error: voucherResult.error });
+  }
+
+  const refreshedDb = readDb();
+  const refreshedUser = refreshedDb.users[req.userIndex];
+
+  const balanceBefore = refreshedUser.balance;
+  refreshedUser.balance -= price;
+  const balanceAfter = refreshedUser.balance;
   const refNum = `REF-${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-  user.transactions = user.transactions || [];
+  refreshedUser.transactions = refreshedUser.transactions || [];
   const newTx = {
-    id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    id: txId,
     userId: email,
     type: 'redeem_data',
     amount: price,
@@ -1544,10 +1589,10 @@ app.post('/api/transactions/data', authenticateToken, (req: any, res) => {
     refNum,
     voucherCode
   };
-  user.transactions.unshift(newTx);
+  refreshedUser.transactions.unshift(newTx);
 
-  user.notifications = user.notifications || [];
-  user.notifications.unshift({
+  refreshedUser.notifications = refreshedUser.notifications || [];
+  refreshedUser.notifications.unshift({
     id: `notif-${Date.now()}`,
     title: 'Data Purchase Successful',
     body: `Successfully purchased ${plan.size} data bundle for ${phoneNumber}. WDV Verified.`,
@@ -1555,12 +1600,12 @@ app.post('/api/transactions/data', authenticateToken, (req: any, res) => {
     unread: true
   });
 
-  writeDb(db);
+  writeDb(refreshedDb);
   logDiagnostic('INFO', 'Data purchase complete', { email, amount: price, phoneNumber });
 
   res.json({
     success: true,
-    balance: user.balance,
+    balance: refreshedUser.balance,
     transaction: newTx
   });
 });
@@ -1586,16 +1631,6 @@ app.post('/api/transactions/transfer', authenticateToken, async (req: any, res) 
   const db = readDb();
   const user = db.users[req.userIndex];
 
-  if (!user.wdvVerified && !user.isWdvVerified) {
-    if (!voucherCode) {
-      return res.status(400).json({ error: "Your account is not verified. Please activate a master WDV voucher in your dashboard or quick actions to proceed." });
-    }
-    const activation = activateVoucherAndVerifyUser(voucherCode, email, db);
-    if (activation.error) {
-      return res.status(400).json({ error: activation.error });
-    }
-  }
-
   const resolvedName = accountName.trim();
   const price = Number(amount);
 
@@ -1618,14 +1653,25 @@ app.post('/api/transactions/transfer', authenticateToken, async (req: any, res) 
     return res.status(400).json({ error: "Duplicate transaction detected. Please wait 10 seconds." });
   }
 
-  const balanceBefore = user.balance;
-  user.balance -= price;
-  const balanceAfter = user.balance;
+  const txId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+  // VERIFY AND CONSUME VOUCHER IN SQL
+  const voucherResult = await verifyAndConsumeVoucherSql(voucherCode, email, txId);
+  if (voucherResult.error) {
+    return res.status(400).json({ error: voucherResult.error });
+  }
+
+  const refreshedDb = readDb();
+  const refreshedUser = refreshedDb.users[req.userIndex];
+
+  const balanceBefore = refreshedUser.balance;
+  refreshedUser.balance -= price;
+  const balanceAfter = refreshedUser.balance;
   const refNum = `REF-${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-  user.transactions = user.transactions || [];
+  refreshedUser.transactions = refreshedUser.transactions || [];
   const newTx = {
-    id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    id: txId,
     userId: email,
     type: 'bank_transfer_direct',
     amount: price,
@@ -1640,10 +1686,10 @@ app.post('/api/transactions/transfer', authenticateToken, async (req: any, res) 
     refNum,
     voucherCode
   };
-  user.transactions.unshift(newTx);
+  refreshedUser.transactions.unshift(newTx);
 
-  user.notifications = user.notifications || [];
-  user.notifications.unshift({
+  refreshedUser.notifications = refreshedUser.notifications || [];
+  refreshedUser.notifications.unshift({
     id: `notif-${Date.now()}`,
     title: 'Bank Cashout Success',
     body: `Successfully cashed out ₦${price.toLocaleString()} to ${resolvedName}. WDV voucher used.`,
@@ -1651,19 +1697,12 @@ app.post('/api/transactions/transfer', authenticateToken, async (req: any, res) 
     unread: true
   });
 
-  // Mark voucher as used
-  const normVoucher = voucherCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const vIndex = db.vouchers.findIndex((v: any) => v.code.toUpperCase().replace(/[^A-Z0-9]/g, '') === normVoucher);
-  if (vIndex !== -1) {
-    db.vouchers[vIndex].status = 'used';
-  }
-
-  writeDb(db);
+  writeDb(refreshedDb);
   logDiagnostic('INFO', 'Bank cashout complete', { email, amount: price, accountNumber });
 
   res.json({
     success: true,
-    balance: user.balance,
+    balance: refreshedUser.balance,
     transaction: newTx,
     accountName: resolvedName
   });
@@ -1685,30 +1724,6 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
   }
   if (!accountName || accountName.trim().length < 3) {
     return res.status(400).json({ error: "Please enter a valid recipient account name (minimum 3 characters)." });
-  }
-  if (!voucherCode) {
-    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
-  }
-
-  const normVoucher = voucherCode.trim();
-
-  // Retrieve the voucher directly from SQL database to prevent any race conditions or duplicate usage.
-  // Uses SELECT ... FOR UPDATE on Postgres for secure row locking.
-  const isPostgres = !!process.env.DATABASE_URL || !!process.env.SQL_HOST;
-  let voucher;
-  try {
-    if (isPostgres) {
-      voucher = await getRow(`SELECT * FROM vouchers WHERE voucherCode = $1 FOR UPDATE`, [normVoucher]);
-    } else {
-      voucher = await getRow(`SELECT * FROM vouchers WHERE voucherCode = $1`, [normVoucher]);
-    }
-  } catch (err: any) {
-    console.error('Error selecting voucher:', err);
-    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
-  }
-
-  if (!voucher || voucher.status !== 'unused') {
-    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
   }
 
   const db = readDb();
@@ -1736,14 +1751,25 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
     return res.status(400).json({ error: "Duplicate transaction detected. Please wait 10 seconds." });
   }
 
-  const balanceBefore = user.balance;
-  user.balance -= price;
-  const balanceAfter = user.balance;
+  const txId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+  // VERIFY AND CONSUME VOUCHER IN SQL
+  const voucherResult = await verifyAndConsumeVoucherSql(voucherCode, email, txId);
+  if (voucherResult.error) {
+    return res.status(400).json({ error: voucherResult.error });
+  }
+
+  const refreshedDb = readDb();
+  const refreshedUser = refreshedDb.users[req.userIndex];
+
+  const balanceBefore = refreshedUser.balance;
+  refreshedUser.balance -= price;
+  const balanceAfter = refreshedUser.balance;
   const refNum = `REF-${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-  user.transactions = user.transactions || [];
+  refreshedUser.transactions = refreshedUser.transactions || [];
   const newTx = {
-    id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    id: txId,
     userId: email,
     type: 'withdraw',
     amount: price,
@@ -1756,12 +1782,12 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
     balanceBefore,
     balanceAfter,
     refNum,
-    voucherCode: normVoucher
+    voucherCode
   };
-  user.transactions.unshift(newTx);
+  refreshedUser.transactions.unshift(newTx);
 
-  user.notifications = user.notifications || [];
-  user.notifications.unshift({
+  refreshedUser.notifications = refreshedUser.notifications || [];
+  refreshedUser.notifications.unshift({
     id: `notif-${Date.now()}`,
     title: 'Withdrawal Successful',
     body: `₦${price.toLocaleString()} withdrawn to ${resolvedName} (${bank}). WDV Verified.`,
@@ -1769,30 +1795,104 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
     unread: true
   });
 
-  try {
-    // Permanently mark the voucher as USED in the SQL database
-    await execute(`
-      UPDATE vouchers
-      SET status = $1, usedAt = $2, usedBy = $3, withdrawalId = $4
-      WHERE voucherCode = $5
-    `, ['used', new Date().toISOString(), email.toLowerCase(), newTx.id, normVoucher]);
+  writeDb(refreshedDb);
+  logDiagnostic('INFO', 'Withdrawal complete', { email, amount: price, accountNumber, voucherCode });
 
-    // Reload internal server cache so it stays in perfect sync
-    await loadDbCache();
+  res.json({
+    success: true,
+    balance: refreshedUser.balance,
+    transaction: newTx,
+    accountName: resolvedName
+  });
+});
 
-    writeDb(db);
-    logDiagnostic('INFO', 'Withdrawal complete', { email, amount: price, accountNumber, voucherCode: normVoucher });
+// Transaction endpoint for Bills Payments (Cable, Electricity, Betting)
+app.post('/api/transactions/bills', authenticateToken, async (req: any, res) => {
+  const { type, provider, accountNumber, amount, voucherCode } = req.body;
+  const email = req.userEmail;
 
-    res.json({
-      success: true,
-      balance: user.balance,
-      transaction: newTx,
-      accountName: resolvedName
-    });
-  } catch (err: any) {
-    console.error('Error updating voucher during withdrawal:', err);
-    res.status(500).json({ error: 'Failed to authorize cashout due to secure database lock error' });
+  if (!type || !['cable', 'electricity', 'betting'].includes(type)) {
+    return res.status(400).json({ error: "Invalid bill payment type." });
   }
+  if (!provider) {
+    return res.status(400).json({ error: "Please select a provider." });
+  }
+  if (!accountNumber || accountNumber.trim().length < 5) {
+    return res.status(400).json({ error: "Please enter a valid account or meter number." });
+  }
+  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    return res.status(400).json({ error: "Please enter a valid bill amount." });
+  }
+
+  const db = readDb();
+  const user = db.users[req.userIndex];
+
+  const price = Number(amount);
+
+  if (user.balance < price) {
+    return res.status(400).json({ error: "Insufficient wallet balance to complete this bill payment" });
+  }
+
+  const txId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+  // VERIFY AND CONSUME VOUCHER IN SQL
+  const voucherResult = await verifyAndConsumeVoucherSql(voucherCode, email, txId);
+  if (voucherResult.error) {
+    return res.status(400).json({ error: voucherResult.error });
+  }
+
+  const refreshedDb = readDb();
+  const refreshedUser = refreshedDb.users[req.userIndex];
+
+  const balanceBefore = refreshedUser.balance;
+  refreshedUser.balance -= price;
+  const balanceAfter = refreshedUser.balance;
+  const refNum = `REF-${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+  const typeLabels: Record<string, string> = {
+    cable: 'Cable TV Bill Payment',
+    electricity: 'Electricity Utility Bill',
+    betting: 'Betting Wallet Fund'
+  };
+
+  const desc = `${typeLabels[type]} (${provider}) - Ref: ${accountNumber}`;
+
+  refreshedUser.transactions = refreshedUser.transactions || [];
+  const newTx = {
+    id: txId,
+    userId: email,
+    type: 'bill_payment',
+    billType: type,
+    amount: price,
+    date: new Date().toISOString(),
+    status: 'success',
+    description: desc,
+    recipientAccount: accountNumber,
+    recipientBank: provider,
+    balanceBefore,
+    balanceAfter,
+    refNum,
+    voucherCode
+  };
+  refreshedUser.transactions.unshift(newTx);
+
+  refreshedUser.notifications = refreshedUser.notifications || [];
+  refreshedUser.notifications.unshift({
+    id: `notif-${Date.now()}`,
+    title: 'Bill Payment Successful',
+    body: `Successfully paid ₦${price.toLocaleString()} for ${provider} (${accountNumber}). WDV Verified.`,
+    date: new Date().toISOString(),
+    unread: true
+  });
+
+  writeDb(refreshedDb);
+  logDiagnostic('INFO', 'Bill payment complete', { email, type, provider, amount: price, accountNumber });
+
+  res.json({
+    success: true,
+    balance: refreshedUser.balance,
+    transaction: newTx
+  });
 });
 
 // Update Balance Directly

@@ -31,7 +31,10 @@ import {
   ShieldCheck,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  Tv,
+  Zap,
+  Gamepad2
 } from 'lucide-react';
 
 import { User, WdvCode, Transaction, NotificationItem } from './types';
@@ -290,6 +293,16 @@ export default function App() {
   const [isVerifyingWithdrawAccount, setIsVerifyingWithdrawAccount] = useState(false);
   const [withdrawVerified, setWithdrawVerified] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
+
+  // Bills Fields
+  const [billsType, setBillsType] = useState<'cable' | 'electricity' | 'betting'>('cable');
+  const [billsProvider, setBillsProvider] = useState('DSTV');
+  const [billsAccountNumber, setBillsAccountNumber] = useState('');
+  const [billsAmount, setBillsAmount] = useState('');
+  const [billsWdvCode, setBillsWdvCode] = useState('');
+
+  // lastTxTime ref to protect against race conditions
+  const lastTxTime = useRef<number>(0);
 
   // Cache for account verifications (Session Cache)
   const verificationCacheRef = useRef<Record<string, { success: boolean; accountName?: string; error?: string }>>({});
@@ -573,21 +586,27 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.user) {
-          setUser(data.user);
-          if (data.user.transactions) {
-            setTransactions(data.user.transactions);
-          }
-          if (data.user.notifications) {
-            setNotifications(data.user.notifications);
-          }
-          if (data.user.loginHistory) {
-            setLoginHistory(data.user.loginHistory);
-          }
-          if (data.user.beneficiaries) {
-            setBeneficiaries(data.user.beneficiaries);
-          }
-          if (data.user.phoneBeneficiaries) {
-            setPhoneBeneficiaries(data.user.phoneBeneficiaries);
+          // Prevent race condition if a transaction succeeded very recently
+          if (Date.now() - lastTxTime.current < 4000) {
+            console.log("[Sync Engine] Skipping user and transaction sync to prevent overwrite of recent transaction state.");
+          } else {
+            setUser(data.user);
+            localStorage.setItem('swiftpay_user', JSON.stringify(data.user));
+            if (data.user.transactions) {
+              setTransactions(data.user.transactions);
+            }
+            if (data.user.notifications) {
+              setNotifications(data.user.notifications);
+            }
+            if (data.user.loginHistory) {
+              setLoginHistory(data.user.loginHistory);
+            }
+            if (data.user.beneficiaries) {
+              setBeneficiaries(data.user.beneficiaries);
+            }
+            if (data.user.phoneBeneficiaries) {
+              setPhoneBeneficiaries(data.user.phoneBeneficiaries);
+            }
           }
         }
       }
@@ -699,7 +718,7 @@ export default function App() {
       setIsAuthenticated(true);
       setHasSetupPin(true);
       setIsPinUnlocked(true);
-      setCurrentScreen('dashboard');
+      setCurrentScreen('congratulations');
       showToast('Account created successfully!', 'success');
     } catch (err) {
       console.error('Registration error:', err);
@@ -1163,8 +1182,11 @@ export default function App() {
       }
 
       // Update user state and transactions list from returned data
-      setUser({ ...user, balance: data.balance } as any);
-      localStorage.setItem('swiftpay_user', JSON.stringify({ ...user, balance: data.balance }));
+      lastTxTime.current = Date.now();
+      setUser(prev => prev ? { ...prev, balance: data.balance } : null);
+      if (user) {
+        localStorage.setItem('swiftpay_user', JSON.stringify({ ...user, balance: data.balance }));
+      }
       setTransactions([data.transaction, ...transactions]);
 
       // Request latest state and balance from backend
@@ -1256,8 +1278,11 @@ export default function App() {
       }
 
       // Update user state and transactions list from returned data
-      setUser({ ...user, balance: data.balance } as any);
-      localStorage.setItem('swiftpay_user', JSON.stringify({ ...user, balance: data.balance }));
+      lastTxTime.current = Date.now();
+      setUser(prev => prev ? { ...prev, balance: data.balance } : null);
+      if (user) {
+        localStorage.setItem('swiftpay_user', JSON.stringify({ ...user, balance: data.balance }));
+      }
       setTransactions([data.transaction, ...transactions]);
 
       // Request latest state and balance from backend
@@ -1350,8 +1375,11 @@ export default function App() {
       }
 
       // Update user state and transactions list from returned data
-      setUser({ ...user, balance: data.balance } as any);
-      localStorage.setItem('swiftpay_user', JSON.stringify({ ...user, balance: data.balance }));
+      lastTxTime.current = Date.now();
+      setUser(prev => prev ? { ...prev, balance: data.balance } : null);
+      if (user) {
+        localStorage.setItem('swiftpay_user', JSON.stringify({ ...user, balance: data.balance }));
+      }
       setTransactions([data.transaction, ...transactions]);
 
       // Request latest state and balance from backend
@@ -1445,8 +1473,11 @@ export default function App() {
       }
 
       // Update user state and transactions list from returned data
-      setUser({ ...user, balance: data.balance } as any);
-      localStorage.setItem('swiftpay_user', JSON.stringify({ ...user, balance: data.balance }));
+      lastTxTime.current = Date.now();
+      setUser(prev => prev ? { ...prev, balance: data.balance } : null);
+      if (user) {
+        localStorage.setItem('swiftpay_user', JSON.stringify({ ...user, balance: data.balance }));
+      }
       setTransactions([data.transaction, ...transactions]);
 
       // Request latest state and balance from backend
@@ -1480,6 +1511,100 @@ export default function App() {
   };
 
   const handleDirectWithdraw = handleWithdrawalSubmit;
+
+  // Perform Bill Payment
+  const handlePayBillSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    if (!billsAccountNumber || billsAccountNumber.trim().length < 5) {
+      showToast('Please enter a valid meter/account/smartcard number (minimum 5 digits).', 'error');
+      return;
+    }
+    if (!billsAmount || isNaN(Number(billsAmount)) || Number(billsAmount) <= 0) {
+      showToast('Please enter a valid bill payment amount.', 'error');
+      return;
+    }
+    const codeToUse = billsWdvCode.trim();
+    if (!codeToUse) {
+      setVoucherErrorModal({
+        open: true,
+        message: "WDV Voucher Required. If you don't have one, tap Buy WDV Voucher."
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/transactions/bills', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('swiftpay_token')}`
+        },
+        body: JSON.stringify({
+          type: billsType,
+          provider: billsProvider,
+          accountNumber: billsAccountNumber,
+          amount: Number(billsAmount),
+          voucherCode: codeToUse
+        })
+      });
+      const data = await res.json();
+
+      if (res.status === 401 || res.status === 403) {
+        showToast('Your session has expired. Please log in again.', 'error');
+        setIsAuthenticated(false);
+        localStorage.removeItem('swiftpay_auth');
+        localStorage.removeItem('swiftpay_token');
+        localStorage.removeItem('swiftpay_user');
+        setCurrentScreen('onboarding');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!res.ok) {
+        showToast(data.error || 'Bill payment failed.', 'error');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Update user state and transactions list from returned data
+      lastTxTime.current = Date.now();
+      setUser(prev => prev ? { ...prev, balance: data.balance } : null);
+      if (user) {
+        localStorage.setItem('swiftpay_user', JSON.stringify({ ...user, balance: data.balance }));
+      }
+      setTransactions([data.transaction, ...transactions]);
+
+      // Request latest state and balance from backend
+      await syncWithBackend();
+
+      // Trigger notification update
+      const newNotif: NotificationItem = {
+        id: `notif-${Date.now()}`,
+        title: 'Bill Payment Successful!',
+        body: `Successfully paid ₦${Number(billsAmount).toLocaleString()} for ${billsProvider} (${billsAccountNumber}).`,
+        date: new Date().toISOString(),
+        unread: true
+      };
+      setNotifications([newNotif, ...notifications]);
+
+      showToast('Bill payment completed successfully!', 'success');
+      setSelectedReceiptTx(data.transaction);
+
+      // Reset fields
+      setBillsAccountNumber('');
+      setBillsAmount('');
+      setBillsWdvCode('');
+      setCurrentScreen('dashboard');
+      setActiveTab('wallet');
+    } catch (err) {
+      showToast('Error performing bill payment.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Pre-fill WDV Code on transfer/airtime forms
   const handleQuickRedeemWdv = (code: string, flow: 'airtime' | 'transfer') => {
@@ -2119,7 +2244,7 @@ export default function App() {
         )}
 
         {/* -------------------- MAIN DASHBOARD WRAPPER -------------------- */}
-        {isAuthenticated && (
+        {isAuthenticated && currentScreen !== 'congratulations' && (
           <div className="flex-1 flex flex-col justify-between h-full relative overflow-hidden bg-[#0c0c14] text-white">
             
             {/* Top Navigation Header */}
@@ -2259,7 +2384,7 @@ export default function App() {
                     <div className="grid grid-cols-4 gap-3">
                       {[
                         { id: 'data', label: 'Data bundles', icon: Smartphone, bg: 'bg-orange-500/10 text-orange-500' },
-                        { id: 'faq', label: 'FAQs Help', icon: HelpCircle, bg: 'bg-purple-500/10 text-purple-500' },
+                        { id: 'bills', label: 'Pay Bills', icon: CreditCard, bg: 'bg-emerald-500/10 text-emerald-500' },
                         { id: 'support', label: 'Support Chat', icon: MessageSquare, bg: 'bg-rose-500/10 text-rose-500' },
                         { id: 'about', label: 'About App', icon: Info, bg: 'bg-blue-500/10 text-blue-500' }
                       ].map((srv) => (
@@ -2269,8 +2394,8 @@ export default function App() {
                           onClick={() => {
                             if (srv.id === 'data') {
                               setCurrentScreen('buy_data');
-                            } else if (srv.id === 'faq') {
-                              setCurrentScreen('faq');
+                            } else if (srv.id === 'bills') {
+                              setCurrentScreen('pay_bills');
                             } else if (srv.id === 'support') {
                               setCurrentScreen('support_live_chat');
                             } else if (srv.id === 'about') {
@@ -3389,6 +3514,191 @@ export default function App() {
                 </div>
               )}
 
+              {/* -------------------- FLOW 5.2: PAY BILLS SCREEN -------------------- */}
+              {currentScreen === 'pay_bills' && (
+                <div className="p-5 space-y-4 animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-[600px] no-scrollbar">
+                  <div className="flex items-center gap-3">
+                    <button
+                      id="btn-bills-back"
+                      onClick={() => setCurrentScreen('dashboard')}
+                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-500"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                    <h4 className="text-base font-bold font-display text-slate-800 dark:text-white">Bill Payments</h4>
+                  </div>
+
+                  <div className="p-4 bg-white/40 dark:bg-slate-900/30 rounded-2xl border border-slate-150 dark:border-slate-800/40 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-mono text-slate-400 block uppercase">Wallet Balance</span>
+                      <span className="text-sm font-bold text-slate-800 dark:text-teal-400 font-mono mt-0.5 block">
+                        {nairaFormat(user?.balance || 0)}
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 bg-indigo-500/10 dark:bg-teal-500/10 px-2.5 py-1 rounded-full border border-indigo-500/10">
+                      Standard Billing
+                    </span>
+                  </div>
+
+                  {/* Bill Type Selector Tabs */}
+                  <div className="grid grid-cols-3 gap-2 bg-slate-100/80 dark:bg-slate-900/60 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => { setBillsType('cable'); setBillsProvider('DSTV'); }}
+                      className={`py-2 text-[10px] font-bold uppercase rounded-lg transition-all flex flex-col items-center gap-1 ${
+                        billsType === 'cable'
+                          ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-teal-400 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                      }`}
+                    >
+                      <Tv className="h-4 w-4" />
+                      <span>Cable TV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setBillsType('electricity'); setBillsProvider('AEDC'); }}
+                      className={`py-2 text-[10px] font-bold uppercase rounded-lg transition-all flex flex-col items-center gap-1 ${
+                        billsType === 'electricity'
+                          ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-teal-400 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                      }`}
+                    >
+                      <Zap className="h-4 w-4" />
+                      <span>Electricity</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setBillsType('betting'); setBillsProvider('SportyBet'); }}
+                      className={`py-2 text-[10px] font-bold uppercase rounded-lg transition-all flex flex-col items-center gap-1 ${
+                        billsType === 'betting'
+                          ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-teal-400 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                      }`}
+                    >
+                      <Gamepad2 className="h-4 w-4" />
+                      <span>Betting</span>
+                    </button>
+                  </div>
+
+                  <GlassCard className="p-5 border border-slate-150 dark:border-slate-800/40">
+                    <form onSubmit={handlePayBillSubmit} className="space-y-4">
+                      {/* Provider Select dropdown */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Select Provider</label>
+                        <select
+                          value={billsProvider}
+                          onChange={(e) => setBillsProvider(e.target.value)}
+                          className="w-full h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500"
+                        >
+                          {billsType === 'cable' && (
+                            <>
+                              <option value="DSTV">DSTV Premium</option>
+                              <option value="GOTV">GOTV Max</option>
+                              <option value="StarTimes">StarTimes Classic</option>
+                            </>
+                          )}
+                          {billsType === 'electricity' && (
+                            <>
+                              <option value="AEDC">Abuja Electricity (AEDC)</option>
+                              <option value="EKEDC">Eko Electricity (EKEDC)</option>
+                              <option value="IKEDC">Ikeja Electricity (IKEDC)</option>
+                              <option value="KAEDCO">Kaduna Electricity (KAEDCO)</option>
+                            </>
+                          )}
+                          {billsType === 'betting' && (
+                            <>
+                              <option value="SportyBet">SportyBet</option>
+                              <option value="Bet9ja">Bet9ja</option>
+                              <option value="1xBet">1xBet Nigeria</option>
+                              <option value="BetKing">BetKing</option>
+                            </>
+                          )}
+                        </select>
+                      </div>
+
+                      {/* Account/Meter/Smartcard Number */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          {billsType === 'cable' ? 'Smartcard Number' : billsType === 'electricity' ? 'Meter Number' : 'Betting User ID'}
+                        </label>
+                        <input
+                          type="text"
+                          value={billsAccountNumber}
+                          onChange={(e) => setBillsAccountNumber(e.target.value.replace(/[^a-zA-Z0-9-]/g, ''))}
+                          placeholder={
+                            billsType === 'cable' ? 'e.g. 1023485764' : billsType === 'electricity' ? 'e.g. 45091827364' : 'e.g. SB-10928374'
+                          }
+                          className="w-full h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500 font-mono"
+                        />
+                      </div>
+
+                      {/* Amount Input */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Amount (₦)</label>
+                        <input
+                          type="text"
+                          value={billsAmount}
+                          onChange={(e) => setBillsAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                          placeholder="e.g. 5000"
+                          className="w-full h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500 font-mono"
+                        />
+                      </div>
+
+                      {/* WDV Voucher Code */}
+                      <div className="space-y-1.5 relative">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">WDV Voucher Code</label>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentScreen('buy_wdv')}
+                            className="text-[9px] font-bold text-indigo-500 dark:text-teal-400 hover:underline uppercase leading-none"
+                          >
+                            Buy WDV Voucher
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={billsWdvCode}
+                          onChange={(e) => setBillsWdvCode(e.target.value.toUpperCase())}
+                          placeholder="WDV-XXXX-XXXX-XXXX"
+                          className="w-full h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500 font-mono placeholder:opacity-50"
+                        />
+                        <div className="absolute top-0 right-0 mt-[-2px] flex items-center gap-1 bg-indigo-500/10 px-2 py-0.5 rounded text-[8px] font-mono font-bold text-indigo-600 dark:text-teal-400 uppercase">
+                          Required
+                        </div>
+                      </div>
+
+                      {/* Informational Alert Box */}
+                      <div className="p-3 bg-indigo-500/5 dark:bg-teal-500/5 rounded-xl border border-indigo-500/10 dark:border-teal-500/10 space-y-1">
+                        <span className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 uppercase block">WDV Security Enforcement</span>
+                        <p className="text-[9.5px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                          A valid and unused WDV Voucher is required for all utility payments. Each voucher is consumed atomically during payment to secure authorization.
+                        </p>
+                      </div>
+
+                      {/* Submit Button */}
+                      <button
+                        id="btn-bills-submit"
+                        type="submit"
+                        disabled={!billsAccountNumber || !billsAmount || !billsWdvCode || isSubmitting}
+                        className={`w-full h-12 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 dark:from-teal-600 dark:to-teal-700 text-white text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                          (!billsAccountNumber || !billsAmount || !billsWdvCode || isSubmitting) ? 'opacity-50 cursor-not-allowed' : 'shadow-lg hover:shadow-indigo-500/10'
+                        }`}
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Authorizing Payment...</span>
+                          </>
+                        ) : (
+                          `Pay ${billsProvider} (${nairaFormat(Number(billsAmount || 0))})`
+                        )}
+                      </button>
+                    </form>
+                  </GlassCard>
+                </div>
+              )}
+
               {/* -------------------- FLOW 6: TRANSFER TO BANK SCREEN -------------------- */}
               {currentScreen === 'transfer_bank' && (
                 <div className="p-5 space-y-5 animate-[fadeIn_0.2s_ease-out]">
@@ -4312,6 +4622,149 @@ export default function App() {
               </div>
             )}
 
+          </div>
+        )}
+
+        {/* -------------------- REGISTRATION CONGRATULATIONS PAGE -------------------- */}
+        {isAuthenticated && currentScreen === 'congratulations' && (
+          <div className="flex-1 flex flex-col items-center justify-center min-h-[600px] h-full relative overflow-hidden bg-gradient-to-br from-[#0a051d] via-[#0d0d21] to-[#04020a] text-white p-6">
+            <style>{`
+              @keyframes confettiFall {
+                0% { transform: translateY(-10%) rotate(0deg); opacity: 1; }
+                100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
+              }
+              @keyframes floatGift {
+                0%, 100% { transform: translateY(0px) rotate(0deg); }
+                50% { transform: translateY(-15px) rotate(5deg); }
+              }
+              @keyframes floatSparkle {
+                0%, 100% { transform: translateY(0px) scale(0.8); opacity: 0.5; }
+                50% { transform: translateY(-10px) scale(1.2); opacity: 1; }
+              }
+              @keyframes pulseCircle {
+                0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.5); }
+                70% { transform: scale(1); box-shadow: 0 0 0 15px rgba(45, 212, 191, 0); }
+                100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(45, 212, 191, 0); }
+              }
+              .animate-confetti {
+                position: absolute;
+                top: -5%;
+                will-change: transform;
+                animation: confettiFall linear infinite;
+              }
+              .animate-float-gift {
+                animation: floatGift 3s ease-in-out infinite;
+              }
+              .animate-float-sparkle {
+                animation: floatSparkle 2.5s ease-in-out infinite;
+              }
+              .animate-pulse-circle {
+                animation: pulseCircle 2s infinite;
+              }
+            `}</style>
+
+            {/* CONFETTI LAYER */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+              {Array.from({ length: 45 }).map((_, i) => {
+                const colors = ['#818cf8', '#2dd4bf', '#a78bfa', '#fb7185', '#fcd34d', '#34d399'];
+                const randomColor = colors[i % colors.length];
+                const randomLeft = `${Math.random() * 100}%`;
+                const randomDelay = `${Math.random() * 5}s`;
+                const randomDuration = `${4 + Math.random() * 4}s`;
+                const randomSize = `${8 + Math.random() * 8}px`;
+                return (
+                  <div
+                    key={i}
+                    className="animate-confetti rounded"
+                    style={{
+                      left: randomLeft,
+                      width: randomSize,
+                      height: randomSize,
+                      backgroundColor: randomColor,
+                      animationDelay: randomDelay,
+                      animationDuration: randomDuration,
+                    }}
+                  />
+                );
+              })}
+            </div>
+
+            {/* BACKGROUND DECORATIONS (BLUR ORBS) */}
+            <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none z-0" />
+            <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-teal-500/10 rounded-full blur-3xl pointer-events-none z-0" />
+
+            {/* MAIN PREMIUM GLASS CARD */}
+            <div className="max-w-md w-full p-8 rounded-[2.5rem] border border-white/10 bg-white/[0.03] backdrop-blur-xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] relative z-10 text-center space-y-8 overflow-hidden animate-[fadeIn_0.4s_ease-out]">
+              
+              {/* SWIFTPAY LOGO AND BRANDING */}
+              <div className="flex flex-col items-center gap-1.5">
+                <span className="text-sm font-extrabold font-display bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] bg-clip-text text-transparent uppercase tracking-widest">
+                  SwiftPay Premium
+                </span>
+                <div className="h-[1px] w-12 bg-gradient-to-r from-[#818cf8]/50 to-[#2dd4bf]/50" />
+              </div>
+
+              {/* FLOATING GIFT BOX AND FLOATING SPARKLES SECTION */}
+              <div className="relative h-28 flex items-center justify-center">
+                {/* Floating Gift Box */}
+                <div className="animate-float-gift relative z-10">
+                  <div className="p-5 rounded-3xl bg-gradient-to-br from-indigo-500/20 to-teal-500/20 border border-white/10 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+                    <span className="text-4xl">🎁</span>
+                  </div>
+                </div>
+                {/* Sparkles side icons */}
+                <div className="absolute left-1/3 top-4 animate-float-sparkle" style={{ animationDelay: '0.3s' }}>
+                  <Sparkles className="h-5 w-5 text-indigo-400" />
+                </div>
+                <div className="absolute right-1/3 bottom-4 animate-float-sparkle" style={{ animationDelay: '0.7s' }}>
+                  <Sparkles className="h-5 w-5 text-teal-400" />
+                </div>
+              </div>
+
+              {/* LARGE GLOWING SUCCESS CHECKMARK */}
+              <div className="h-16 w-16 rounded-full bg-teal-500/10 border border-teal-400/40 flex items-center justify-center mx-auto animate-pulse-circle text-teal-400">
+                <Check className="h-8 w-8 text-teal-400 stroke-[3px]" />
+              </div>
+
+              {/* CONGRATULATIONS CONCRETE TEXT LABELS */}
+              <div className="space-y-4">
+                <h1 className="text-3xl font-black font-display bg-gradient-to-r from-teal-300 via-indigo-200 to-teal-200 bg-clip-text text-transparent tracking-tight">
+                  🎉 Congratulations!
+                </h1>
+                
+                <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest">
+                  You are qualified!
+                </p>
+
+                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 py-5">
+                  <p className="text-xs text-slate-400 font-medium">SPECIAL REGISTRATION REWARD</p>
+                  <p className="text-3xl font-black text-teal-400 font-mono mt-1 tracking-tight drop-shadow-[0_0_15px_rgba(45,212,191,0.3)]">
+                    ₦200,000
+                  </p>
+                </div>
+
+                <p className="text-[11.5px] text-slate-400 font-medium leading-relaxed max-w-xs mx-auto">
+                  This reward has been added successfully to your SwiftPay wallet
+                </p>
+              </div>
+
+              {/* CTA ACTION BUTTON */}
+              <div className="pt-2">
+                <button
+                  id="btn-congrats-proceed"
+                  onClick={async () => {
+                    // Instantly sync balance and switch to dashboard
+                    await syncWithBackend();
+                    setCurrentScreen('dashboard');
+                    setActiveTab('wallet');
+                  }}
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] hover:from-[#6366f1] hover:to-[#14b8a6] text-slate-950 text-xs font-extrabold uppercase tracking-widest shadow-lg shadow-indigo-500/10 active:scale-[0.98] transition-all"
+                >
+                  Proceed to Wallet
+                </button>
+              </div>
+
+            </div>
           </div>
         )}
 
