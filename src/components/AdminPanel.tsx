@@ -61,6 +61,12 @@ export default function AdminPanel({
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
+  // WDV Voucher Management state
+  const [vouchers, setVouchers] = useState<any[]>([]);
+  const [loadingVouchers, setLoadingVouchers] = useState(false);
+  const [voucherSearchTerm, setVoucherSearchTerm] = useState('');
+  const [generatingVoucher, setGeneratingVoucher] = useState(false);
+
   const getAdminHeaders = (extraHeaders = {}) => {
     const token = localStorage.getItem('swiftpay_admin_token') || '';
     return {
@@ -293,13 +299,108 @@ export default function AdminPanel({
     fetchLogs();
     fetchWdvConfig();
     fetchAdminSettings();
+    fetchVouchers();
   }, []);
+
+  const fetchVouchers = async () => {
+    setLoadingVouchers(true);
+    try {
+      const res = await fetch('/api/admin/vouchers', {
+        headers: getAdminHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVouchers(data.vouchers || []);
+      } else {
+        onToast('Failed to fetch WDV vouchers', 'error');
+      }
+    } catch (err) {
+      onToast('Network error loading WDV vouchers', 'error');
+    } finally {
+      setLoadingVouchers(false);
+    }
+  };
+
+  const handleGenerateVoucher = async () => {
+    setGeneratingVoucher(true);
+    try {
+      const res = await fetch('/api/admin/vouchers/generate', {
+        method: 'POST',
+        headers: getAdminHeaders()
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onToast(`New WDV voucher generated: ${data.code}`, 'success');
+        fetchVouchers();
+      } else {
+        onToast(data.error || 'Failed to generate voucher', 'error');
+      }
+    } catch (err) {
+      onToast('Network error generating voucher', 'error');
+    } finally {
+      setGeneratingVoucher(false);
+    }
+  };
+
+  const handleDeleteVoucher = async (id: string) => {
+    if (!window.confirm('Are you sure you want to permanently delete this voucher from the database?')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/vouchers/delete', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onToast('Voucher permanently deleted.', 'success');
+        fetchVouchers();
+      } else {
+        onToast(data.error || 'Failed to delete voucher', 'error');
+      }
+    } catch (err) {
+      onToast('Network error deleting voucher', 'error');
+    }
+  };
+
+  const handleDeactivateVoucher = async (id: string) => {
+    if (!window.confirm('Are you sure you want to manually deactivate this voucher? This will permanently mark it as USED.')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/vouchers/deactivate', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onToast('Voucher successfully deactivated.', 'success');
+        fetchVouchers();
+      } else {
+        onToast(data.error || 'Failed to deactivate voucher', 'error');
+      }
+    } catch (err) {
+      onToast('Network error deactivating voucher', 'error');
+    }
+  };
 
   // Filter users
   const filteredUsers = users.filter(u => 
     u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Filter vouchers
+  const filteredVouchers = vouchers.filter(v => {
+    const term = voucherSearchTerm.toLowerCase();
+    const code = (v.voucherCode || '').toLowerCase();
+    const status = (v.status || '').toLowerCase();
+    const usedBy = (v.usedBy || '').toLowerCase();
+    const purchasedBy = (v.purchasedBy || '').toLowerCase();
+    return code.includes(term) || status.includes(term) || usedBy.includes(term) || purchasedBy.includes(term);
+  });
 
   // Calculate admin statistics
   const totalUsersCount = users.length;
@@ -943,6 +1044,140 @@ export default function AdminPanel({
             </button>
           </div>
         </form>
+      </GlassCard>
+
+      {/* WDV Voucher Database & Generation */}
+      <GlassCard className="p-4 border-white/5 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between pb-2 border-b border-white/5 gap-3">
+          <div>
+            <h5 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
+              <Key className="h-4 w-4 text-teal-400" />
+              WDV Voucher Management
+            </h5>
+            <p className="text-[10px] text-slate-400 mt-0.5">Generate, search, manually deactivate, or delete secure, database-backed one-time use vouchers.</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleGenerateVoucher}
+            disabled={generatingVoucher}
+            className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:opacity-50 text-slate-950 font-bold text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+          >
+            {generatingVoucher ? (
+              <RefreshCw className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            Generate New Voucher
+          </button>
+        </div>
+
+        {/* Voucher Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search vouchers by code, status, owner, or redeemer..."
+            value={voucherSearchTerm}
+            onChange={(e) => setVoucherSearchTerm(e.target.value)}
+            className="w-full text-xs pl-9 pr-4 py-2.5 rounded-xl border border-white/10 bg-slate-950/40 text-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+          />
+        </div>
+
+        {/* Vouchers list */}
+        <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
+          {loadingVouchers ? (
+            <div className="text-center py-8 text-slate-400 text-xs font-mono">Loading voucher database...</div>
+          ) : filteredVouchers.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs">No vouchers matching search term.</div>
+          ) : (
+            filteredVouchers.map((v) => {
+              const isUnused = v.status === 'unused';
+              return (
+                <div
+                  key={v.id}
+                  className={`p-3.5 rounded-xl border transition-all bg-slate-950/20 ${
+                    isUnused ? 'border-white/5 hover:border-teal-500/10' : 'border-white/5 opacity-70'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold font-mono text-white tracking-wider select-all">{v.voucherCode}</span>
+                        <span
+                          className={`text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded ${
+                            isUnused
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-slate-850 text-slate-400 border border-white/5'
+                          }`}
+                        >
+                          {v.status}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-[9px] text-slate-400 font-mono">
+                        <div>
+                          <span className="text-slate-500">Generated:</span> {v.generatedAt ? new Date(v.generatedAt).toLocaleString() : 'N/A'}
+                        </div>
+                        {v.purchasedBy && v.purchasedBy !== 'admin' && (
+                          <div>
+                            <span className="text-slate-500">Purchased By:</span> <span className="text-teal-400">{v.purchasedBy}</span>
+                          </div>
+                        )}
+                        {!isUnused && (
+                          <>
+                            <div className="sm:col-span-2 mt-0.5 pt-0.5 border-t border-white/5">
+                              <span className="text-rose-400 font-bold">Redeemed At:</span> {v.usedAt ? new Date(v.usedAt).toLocaleString() : 'N/A'}
+                            </div>
+                            <div className="sm:col-span-2">
+                              <span className="text-rose-400 font-bold">Redeemed By:</span> <span className="text-white font-bold">{v.usedBy}</span>
+                            </div>
+                            {v.withdrawalId && (
+                              <div className="sm:col-span-2">
+                                <span className="text-slate-500 font-bold">Tx ID:</span> <span className="text-slate-300 font-bold">{v.withdrawalId}</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 sm:self-center self-end pt-2 sm:pt-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(v.voucherCode);
+                          onToast('Voucher code copied to clipboard!', 'success');
+                        }}
+                        className="p-2 bg-white/5 border border-white/5 hover:border-teal-500/20 hover:bg-teal-500/10 text-teal-400 rounded-lg transition-all cursor-pointer"
+                        title="Copy Code"
+                      >
+                        <RefreshCw className="h-3 w-3 rotate-90" />
+                      </button>
+                      {isUnused && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeactivateVoucher(v.id)}
+                          className="p-2 bg-white/5 border border-white/5 hover:border-amber-500/20 hover:bg-amber-500/10 text-amber-500 rounded-lg transition-all cursor-pointer"
+                          title="Deactivate Voucher"
+                        >
+                          <ToggleLeft className="h-3 w-3 text-amber-500" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteVoucher(v.id)}
+                        className="p-2 bg-white/5 border border-white/5 hover:border-red-500/20 hover:bg-red-500/10 text-red-500 rounded-lg transition-all cursor-pointer"
+                        title="Delete Voucher"
+                      >
+                        <Trash2 className="h-3 w-3 text-red-500" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </GlassCard>
 
       {/* Video Management Section */}

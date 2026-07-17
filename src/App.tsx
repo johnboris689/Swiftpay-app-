@@ -589,6 +589,20 @@ export default function App() {
           }
         }
       }
+
+      // Fetch user's own active and historic WDV vouchers directly from DB
+      const vouchersRes = await fetch('/api/vouchers/my-vouchers', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (vouchersRes.ok) {
+        const vouchersData = await vouchersRes.json();
+        if (vouchersData.success && vouchersData.vouchers) {
+          setVouchers(vouchersData.vouchers);
+          localStorage.setItem('swiftpay_vouchers', JSON.stringify(vouchersData.vouchers));
+        }
+      }
     } catch (err) {
       console.warn('Error syncing with backend:', err);
     }

@@ -409,12 +409,17 @@ export async function initDb() {
   // Extra tables required by server
   await execute(`
     CREATE TABLE IF NOT EXISTS vouchers (
-      code TEXT PRIMARY KEY,
+      id TEXT PRIMARY KEY,
+      voucherCode TEXT UNIQUE,
+      code TEXT,
       amount REAL,
       status TEXT,
       usedBy TEXT,
       usedAt TEXT,
-      redeemedBy TEXT DEFAULT '[]'
+      redeemedBy TEXT DEFAULT '[]',
+      generatedAt TEXT,
+      withdrawalId TEXT,
+      purchasedBy TEXT
     )
   `);
 
@@ -428,6 +433,41 @@ export async function initDb() {
     await execute(`ALTER TABLE vouchers ADD COLUMN redeemedBy TEXT DEFAULT '[]'`);
   } catch (e) {
     // Column already exists
+  }
+  try {
+    await execute(`ALTER TABLE vouchers ADD COLUMN id TEXT`);
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    await execute(`ALTER TABLE vouchers ADD COLUMN voucherCode TEXT`);
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    await execute(`ALTER TABLE vouchers ADD COLUMN generatedAt TEXT`);
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    await execute(`ALTER TABLE vouchers ADD COLUMN withdrawalId TEXT`);
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    await execute(`ALTER TABLE vouchers ADD COLUMN purchasedBy TEXT`);
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    await execute(`UPDATE vouchers SET id = code WHERE id IS NULL`);
+  } catch (e) {
+    // Update failed
+  }
+  try {
+    await execute(`UPDATE vouchers SET voucherCode = code WHERE voucherCode IS NULL`);
+  } catch (e) {
+    // Update failed
   }
 
   await execute(`

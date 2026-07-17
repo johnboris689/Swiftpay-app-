@@ -233,31 +233,21 @@ async function loadDbCache() {
       isWdvVerified: row.iswdvverified === 1 || row.wdvverified === 1
     }));
 
-    // Fetch vouchers - enforce only the two master vouchers
-    const MASTER_WDV_CODES = ['WDV-7674-2206-6501', 'WDV-9001-3029-8675'];
+    // Fetch vouchers - load all database-backed vouchers with complete fields
     const voucherRows = await getAllRows(`SELECT * FROM vouchers`);
     let vouchers = voucherRows.map(row => ({
-      code: row.code,
-      amount: Number(row.amount ?? 0),
+      id: row.id || row.vouchercode || row.code,
+      code: row.vouchercode || row.code,
+      voucherCode: row.vouchercode || row.code,
+      amount: Number(row.amount ?? 6500),
       status: row.status || 'unused',
       usedBy: row.usedby || '',
       usedAt: row.usedat || '',
+      generatedAt: row.generatedat || new Date().toISOString(),
+      withdrawalId: row.withdrawalid || '',
+      purchasedBy: row.purchasedby || '',
       redeemedBy: safeParseJson(row.redeemedby, [])
-    })).filter(v => MASTER_WDV_CODES.includes(v.code.toUpperCase()));
-
-    // Ensure both master vouchers are present
-    for (const masterCode of MASTER_WDV_CODES) {
-      if (!vouchers.some(v => v.code.toUpperCase() === masterCode.toUpperCase())) {
-        vouchers.push({
-          code: masterCode,
-          amount: 6500,
-          status: 'unused',
-          usedBy: '',
-          usedAt: '',
-          redeemedBy: []
-        });
-      }
-    }
+    }));
 
     // Fetch password resets
     const resetRows = await getAllRows(`SELECT * FROM password_resets`);
@@ -1658,19 +1648,33 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
   if (!accountName || accountName.trim().length < 3) {
     return res.status(400).json({ error: "Please enter a valid recipient account name (minimum 3 characters)." });
   }
+  if (!voucherCode) {
+    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+  }
+
+  const normVoucher = voucherCode.trim();
+
+  // Retrieve the voucher directly from SQL database to prevent any race conditions or duplicate usage.
+  // Uses SELECT ... FOR UPDATE on Postgres for secure row locking.
+  const isPostgres = !!process.env.DATABASE_URL || !!process.env.SQL_HOST;
+  let voucher;
+  try {
+    if (isPostgres) {
+      voucher = await getRow(`SELECT * FROM vouchers WHERE voucherCode = $1 FOR UPDATE`, [normVoucher]);
+    } else {
+      voucher = await getRow(`SELECT * FROM vouchers WHERE voucherCode = $1`, [normVoucher]);
+    }
+  } catch (err: any) {
+    console.error('Error selecting voucher:', err);
+    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+  }
+
+  if (!voucher || voucher.status !== 'unused') {
+    return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+  }
 
   const db = readDb();
   const user = db.users[req.userIndex];
-
-  if (!user.wdvVerified) {
-    if (!voucherCode) {
-      return res.status(400).json({ error: "WDV voucher is required. If you don't have one, tap 'Buy WDV Voucher'." });
-    }
-    const activation = activateVoucherAndVerifyUser(voucherCode, email, db);
-    if (activation.error) {
-      return res.status(400).json({ error: activation.error });
-    }
-  }
 
   const resolvedName = accountName.trim();
   const price = Number(amount);
@@ -1714,7 +1718,7 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
     balanceBefore,
     balanceAfter,
     refNum,
-    voucherCode
+    voucherCode: normVoucher
   };
   user.transactions.unshift(newTx);
 
@@ -1727,15 +1731,30 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
     unread: true
   });
 
-  writeDb(db);
-  logDiagnostic('INFO', 'Withdrawal complete', { email, amount: price, accountNumber });
+  try {
+    // Permanently mark the voucher as USED in the SQL database
+    await execute(`
+      UPDATE vouchers
+      SET status = $1, usedAt = $2, usedBy = $3, withdrawalId = $4
+      WHERE voucherCode = $5
+    `, ['used', new Date().toISOString(), email.toLowerCase(), newTx.id, normVoucher]);
 
-  res.json({
-    success: true,
-    balance: user.balance,
-    transaction: newTx,
-    accountName: resolvedName
-  });
+    // Reload internal server cache so it stays in perfect sync
+    await loadDbCache();
+
+    writeDb(db);
+    logDiagnostic('INFO', 'Withdrawal complete', { email, amount: price, accountNumber, voucherCode: normVoucher });
+
+    res.json({
+      success: true,
+      balance: user.balance,
+      transaction: newTx,
+      accountName: resolvedName
+    });
+  } catch (err: any) {
+    console.error('Error updating voucher during withdrawal:', err);
+    res.status(500).json({ error: 'Failed to authorize cashout due to secure database lock error' });
+  }
 });
 
 // Update Balance Directly
@@ -1768,7 +1787,7 @@ function generateVoucherCode(): string {
 }
 
 // Purchase WDV Voucher Price Lock API
-app.post('/api/vouchers/purchase', (req, res) => {
+app.post('/api/vouchers/purchase', async (req, res) => {
   const { email, amount } = req.body;
   if (!email || amount === undefined) {
     return res.status(400).json({ error: 'Email and amount are required.' });
@@ -1783,35 +1802,72 @@ app.post('/api/vouchers/purchase', (req, res) => {
   }
 
   const code = generateVoucherCode();
-  const newVoucher = {
-    code,
-    amount: config.voucherPrice,
-    status: 'unused'
-  };
-  db.vouchers = db.vouchers || [];
-  db.vouchers.push(newVoucher);
+  const id = `v-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
-  // Add notification to user
-  const userIndex = db.users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
-  if (userIndex !== -1) {
-    db.users[userIndex].notifications = db.users[userIndex].notifications || [];
-    db.users[userIndex].notifications.unshift({
-      id: `notif-${Date.now()}`,
-      title: 'WDV Voucher Purchased',
-      body: `You successfully purchased a WDV Voucher. Code: ${code}. Copy and use it to complete transactions!`,
-      date: new Date().toISOString(),
-      unread: true
+  try {
+    await execute(`
+      INSERT INTO vouchers (id, voucherCode, code, amount, status, usedBy, usedAt, generatedAt, withdrawalId, purchasedBy, redeemedBy)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [id, code, code, config.voucherPrice, 'unused', '', '', new Date().toISOString(), '', email.toLowerCase(), '[]']);
+
+    await loadDbCache();
+
+    // Add notification to user
+    const userIndex = db.users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+    if (userIndex !== -1) {
+      db.users[userIndex].notifications = db.users[userIndex].notifications || [];
+      db.users[userIndex].notifications.unshift({
+        id: `notif-${Date.now()}`,
+        title: 'WDV Voucher Purchased',
+        body: `You successfully purchased a WDV Voucher. Code: ${code}. Copy and use it to complete transactions!`,
+        date: new Date().toISOString(),
+        unread: true
+      });
+      writeDb(db);
+    }
+
+    logDiagnostic('INFO', 'WDV Voucher purchased successfully', { email, code });
+
+    res.json({
+      success: true,
+      code,
+      message: 'WDV Purchase completed successfully! Voucher generated.'
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to complete purchase' });
   }
+});
 
-  writeDb(db);
-  logDiagnostic('INFO', 'WDV Voucher purchased successfully', { email, code });
+// Get user's own active and historic WDV vouchers
+app.get('/api/vouchers/my-vouchers', authenticateToken, async (req: any, res) => {
+  const email = req.userEmail.toLowerCase();
+  try {
+    const rows = await getAllRows(`
+      SELECT * FROM vouchers 
+      WHERE LOWER(usedBy) = $1 OR LOWER(purchasedBy) = $1
+      ORDER BY generatedAt DESC
+    `, [email]);
 
-  res.json({
-    success: true,
-    code,
-    message: 'WDV Purchase completed successfully! Voucher generated.'
-  });
+    const userVouchers = rows.map(r => ({
+      id: r.id || r.vouchercode || r.code,
+      code: r.vouchercode || r.code,
+      voucherCode: r.vouchercode || r.code,
+      status: r.status,
+      createdAt: r.generatedat,
+      usedAt: r.usedat,
+      usedBy: r.usedby,
+      withdrawalId: r.withdrawalid,
+      purchasedBy: r.purchasedby
+    }));
+
+    res.json({
+      success: true,
+      vouchers: userVouchers
+    });
+  } catch (err: any) {
+    console.error('Error fetching user vouchers:', err);
+    res.status(500).json({ error: 'Failed to fetch your WDV vouchers' });
+  }
 });
 
 // Get WDV Configuration (supporting legacy bpc route as well)
@@ -1994,6 +2050,121 @@ app.post('/api/admin/video/delete', authenticateAdminToken, async (req, res) => 
   } catch (err: any) {
     console.error('Error deleting video guide:', err);
     res.status(500).json({ error: err.message || 'Failed to delete video.' });
+  }
+});
+
+// Admin WDV Voucher Management Endpoints
+// List all vouchers
+app.get('/api/admin/vouchers', authenticateAdminToken, async (req, res) => {
+  try {
+    const rows = await getAllRows(`SELECT * FROM vouchers ORDER BY generatedAt DESC`);
+    const vouchers = rows.map(r => ({
+      id: r.id || r.vouchercode || r.code,
+      voucherCode: r.vouchercode || r.code,
+      status: r.status,
+      generatedAt: r.generatedat,
+      usedAt: r.usedat,
+      usedBy: r.usedby,
+      withdrawalId: r.withdrawalid,
+      purchasedBy: r.purchasedby
+    }));
+    res.json({ success: true, vouchers });
+  } catch (err: any) {
+    console.error('Error fetching admin vouchers:', err);
+    res.status(500).json({ error: 'Failed to fetch WDV vouchers from database.' });
+  }
+});
+
+// Generate ONE new unique random WDV voucher
+app.post('/api/admin/vouchers/generate', authenticateAdminToken, async (req, res) => {
+  try {
+    let isUnique = false;
+    let code = '';
+    let attempts = 0;
+
+    // Ensure the generated code is unique
+    while (!isUnique && attempts < 10) {
+      code = generateVoucherCode();
+      const existing = await getRow(`SELECT 1 FROM vouchers WHERE voucherCode = $1`, [code]);
+      if (!existing) {
+        isUnique = true;
+      }
+      attempts++;
+    }
+
+    if (!isUnique) {
+      return res.status(500).json({ error: 'Failed to generate a unique voucher code. Please try again.' });
+    }
+
+    const id = `v-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    const generatedAt = new Date().toISOString();
+
+    await execute(`
+      INSERT INTO vouchers (id, voucherCode, code, amount, status, usedBy, usedAt, generatedAt, withdrawalId, purchasedBy, redeemedBy)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [id, code, code, 6500, 'unused', '', '', generatedAt, '', 'admin', '[]']);
+
+    await loadDbCache();
+
+    logDiagnostic('SECURITY_ALERT', 'Admin generated new WDV voucher', { code });
+
+    res.json({ success: true, code });
+  } catch (err: any) {
+    console.error('Error generating admin voucher:', err);
+    res.status(500).json({ error: 'Failed to generate WDV voucher.' });
+  }
+});
+
+// Delete a voucher permanently
+app.post('/api/admin/vouchers/delete', authenticateAdminToken, async (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res.status(400).json({ error: 'Voucher ID is required.' });
+  }
+  try {
+    const voucher = await getRow(`SELECT * FROM vouchers WHERE id = $1`, [id]);
+    if (!voucher) {
+      return res.status(404).json({ error: 'Voucher not found.' });
+    }
+
+    await execute(`DELETE FROM vouchers WHERE id = $1`, [id]);
+    await loadDbCache();
+
+    logDiagnostic('SECURITY_ALERT', 'Admin deleted WDV voucher permanently', { code: voucher.vouchercode || voucher.code });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error deleting voucher:', err);
+    res.status(500).json({ error: 'Failed to delete WDV voucher.' });
+  }
+});
+
+// Manually deactivate a voucher (status -> used)
+app.post('/api/admin/vouchers/deactivate', authenticateAdminToken, async (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res.status(400).json({ error: 'Voucher ID is required.' });
+  }
+  try {
+    const voucher = await getRow(`SELECT * FROM vouchers WHERE id = $1`, [id]);
+    if (!voucher) {
+      return res.status(404).json({ error: 'Voucher not found.' });
+    }
+
+    await execute(`
+      UPDATE vouchers
+      SET status = $1, usedAt = $2, usedBy = $3
+      WHERE id = $4
+    `, ['used', new Date().toISOString(), 'manually_deactivated_by_admin', id]);
+
+    await loadDbCache();
+
+    logDiagnostic('SECURITY_ALERT', 'Admin manually deactivated WDV voucher', { code: voucher.vouchercode || voucher.code });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error deactivating voucher:', err);
+    res.status(500).json({ error: 'Failed to deactivate WDV voucher.' });
   }
 });
 
