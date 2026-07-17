@@ -19,6 +19,7 @@ export default function AdminPanel({
   onAddGlobalNotification,
   onSendSimulatedEmail
 }: AdminPanelProps) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'voucher_generator'>('overview');
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -305,14 +306,23 @@ export default function AdminPanel({
   const fetchVouchers = async () => {
     setLoadingVouchers(true);
     try {
-      const res = await fetch('/api/admin/vouchers', {
+      const res = await fetch('/api/admin/wdv', {
         headers: getAdminHeaders()
       });
       if (res.ok) {
         const data = await res.json();
         setVouchers(data.vouchers || []);
       } else {
-        onToast('Failed to fetch WDV vouchers', 'error');
+        // Fallback to existing path if custom route isn't loaded yet
+        const fallbackRes = await fetch('/api/admin/vouchers', {
+          headers: getAdminHeaders()
+        });
+        if (fallbackRes.ok) {
+          const data = await fallbackRes.json();
+          setVouchers(data.vouchers || []);
+        } else {
+          onToast('Failed to fetch WDV vouchers', 'error');
+        }
       }
     } catch (err) {
       onToast('Network error loading WDV vouchers', 'error');
@@ -324,13 +334,13 @@ export default function AdminPanel({
   const handleGenerateVoucher = async () => {
     setGeneratingVoucher(true);
     try {
-      const res = await fetch('/api/admin/vouchers/generate', {
+      const res = await fetch('/api/admin/wdv/generate', {
         method: 'POST',
         headers: getAdminHeaders()
       });
       const data = await res.json();
       if (res.ok) {
-        onToast(`New WDV voucher generated: ${data.code}`, 'success');
+        onToast(`New WDV voucher generated: ${data.voucher?.code || data.code}`, 'success');
         fetchVouchers();
       } else {
         onToast(data.error || 'Failed to generate voucher', 'error');
@@ -347,17 +357,27 @@ export default function AdminPanel({
       return;
     }
     try {
-      const res = await fetch('/api/admin/vouchers/delete', {
-        method: 'POST',
-        headers: getAdminHeaders(),
-        body: JSON.stringify({ id })
+      const res = await fetch(`/api/admin/wdv/${id}`, {
+        method: 'DELETE',
+        headers: getAdminHeaders()
       });
       const data = await res.json();
       if (res.ok) {
         onToast('Voucher permanently deleted.', 'success');
         fetchVouchers();
       } else {
-        onToast(data.error || 'Failed to delete voucher', 'error');
+        // Fallback to POST delete if needed
+        const fallbackRes = await fetch('/api/admin/vouchers/delete', {
+          method: 'POST',
+          headers: getAdminHeaders(),
+          body: JSON.stringify({ id })
+        });
+        if (fallbackRes.ok) {
+          onToast('Voucher permanently deleted.', 'success');
+          fetchVouchers();
+        } else {
+          onToast(data.error || 'Failed to delete voucher', 'error');
+        }
       }
     } catch (err) {
       onToast('Network error deleting voucher', 'error');
@@ -609,16 +629,65 @@ export default function AdminPanel({
           </div>
         </div>
         <button
-          onClick={fetchAllUsers}
-          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-teal-400 border border-white/10"
-          title="Refresh statistics"
+          onClick={() => {
+            fetchAllUsers();
+            fetchVouchers();
+            fetchLogs();
+          }}
+          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-teal-400 border border-white/10 cursor-pointer flex items-center gap-1 text-[10px]"
+          title="Refresh All Data"
         >
           <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
         </button>
       </div>
 
-      {/* Overview Statistics Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Sleek Sidebar Menu */}
+        <div className="w-full lg:w-64 shrink-0 flex flex-col space-y-2 bg-slate-950/20 border border-white/5 rounded-2xl p-4">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2 px-2.5 font-bold">Admin Navigation</div>
+          
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`w-full text-left px-3.5 py-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2.5 transition-all cursor-pointer ${
+              activeTab === 'overview'
+                ? 'bg-gradient-to-r from-teal-500/10 to-indigo-500/10 border border-teal-500/20 text-teal-400 shadow-[0_4px_25px_rgba(20,184,166,0.06)]'
+                : 'border border-transparent hover:bg-white/5 text-slate-400 hover:text-white'
+            }`}
+          >
+            <BarChart3 className="h-4 w-4 text-teal-400" />
+            Dashboard Overview
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('voucher_generator')}
+            className={`w-full text-left px-3.5 py-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2.5 transition-all cursor-pointer ${
+              activeTab === 'voucher_generator'
+                ? 'bg-gradient-to-r from-teal-500/10 to-indigo-500/10 border border-teal-500/20 text-teal-400 shadow-[0_4px_25px_rgba(20,184,166,0.06)]'
+                : 'border border-transparent hover:bg-white/5 text-slate-400 hover:text-white'
+            }`}
+          >
+            <Key className="h-4 w-4 text-teal-400" />
+            WDV Voucher Generator
+          </button>
+
+          <div className="pt-4 border-t border-white/5 mt-4">
+            <button
+              onClick={onBack}
+              className="w-full text-left px-3.5 py-2.5 rounded-xl border border-white/5 hover:border-red-500/25 hover:bg-red-500/10 text-slate-400 hover:text-red-400 font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Exit Console
+            </button>
+          </div>
+        </div>
+
+        {/* Content Workspace */}
+        <div className="flex-1 w-full space-y-6">
+          {activeTab === 'overview' && (
+            <>
+              {/* Overview Statistics Cards Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <GlassCard className="p-3 bg-[#1e1b4b]/10 border-white/5 flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400">
             <Users className="h-4 w-4" />
@@ -1045,142 +1114,183 @@ export default function AdminPanel({
           </div>
         </form>
       </GlassCard>
+            </>
+          )}
 
-      {/* WDV Voucher Database & Generation */}
-      <GlassCard className="p-4 border-white/5 space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between pb-2 border-b border-white/5 gap-3">
-          <div>
-            <h5 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
-              <Key className="h-4 w-4 text-teal-400" />
-              WDV Voucher Management
-            </h5>
-            <p className="text-[10px] text-slate-400 mt-0.5">Generate, search, manually deactivate, or delete secure, database-backed one-time use vouchers.</p>
-          </div>
-          <button
-            type="button"
-            onClick={handleGenerateVoucher}
-            disabled={generatingVoucher}
-            className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:opacity-50 text-slate-950 font-bold text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-          >
-            {generatingVoucher ? (
-              <RefreshCw className="h-3 w-3 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3 w-3" />
-            )}
-            Generate New Voucher
-          </button>
-        </div>
-
-        {/* Voucher Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search vouchers by code, status, owner, or redeemer..."
-            value={voucherSearchTerm}
-            onChange={(e) => setVoucherSearchTerm(e.target.value)}
-            className="w-full text-xs pl-9 pr-4 py-2.5 rounded-xl border border-white/10 bg-slate-950/40 text-white focus:outline-none focus:ring-1 focus:ring-teal-400"
-          />
-        </div>
-
-        {/* Vouchers list */}
-        <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
-          {loadingVouchers ? (
-            <div className="text-center py-8 text-slate-400 text-xs font-mono">Loading voucher database...</div>
-          ) : filteredVouchers.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 text-xs">No vouchers matching search term.</div>
-          ) : (
-            filteredVouchers.map((v) => {
-              const isUnused = v.status === 'unused';
-              return (
-                <div
-                  key={v.id}
-                  className={`p-3.5 rounded-xl border transition-all bg-slate-950/20 ${
-                    isUnused ? 'border-white/5 hover:border-teal-500/10' : 'border-white/5 opacity-70'
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold font-mono text-white tracking-wider select-all">{v.voucherCode}</span>
-                        <span
-                          className={`text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded ${
-                            isUnused
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : 'bg-slate-850 text-slate-400 border border-white/5'
-                          }`}
-                        >
-                          {v.status}
-                        </span>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-[9px] text-slate-400 font-mono">
-                        <div>
-                          <span className="text-slate-500">Generated:</span> {v.generatedAt ? new Date(v.generatedAt).toLocaleString() : 'N/A'}
-                        </div>
-                        {v.purchasedBy && v.purchasedBy !== 'admin' && (
-                          <div>
-                            <span className="text-slate-500">Purchased By:</span> <span className="text-teal-400">{v.purchasedBy}</span>
-                          </div>
-                        )}
-                        {!isUnused && (
-                          <>
-                            <div className="sm:col-span-2 mt-0.5 pt-0.5 border-t border-white/5">
-                              <span className="text-rose-400 font-bold">Redeemed At:</span> {v.usedAt ? new Date(v.usedAt).toLocaleString() : 'N/A'}
-                            </div>
-                            <div className="sm:col-span-2">
-                              <span className="text-rose-400 font-bold">Redeemed By:</span> <span className="text-white font-bold">{v.usedBy}</span>
-                            </div>
-                            {v.withdrawalId && (
-                              <div className="sm:col-span-2">
-                                <span className="text-slate-500 font-bold">Tx ID:</span> <span className="text-slate-300 font-bold">{v.withdrawalId}</span>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 sm:self-center self-end pt-2 sm:pt-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(v.voucherCode);
-                          onToast('Voucher code copied to clipboard!', 'success');
-                        }}
-                        className="p-2 bg-white/5 border border-white/5 hover:border-teal-500/20 hover:bg-teal-500/10 text-teal-400 rounded-lg transition-all cursor-pointer"
-                        title="Copy Code"
-                      >
-                        <RefreshCw className="h-3 w-3 rotate-90" />
-                      </button>
-                      {isUnused && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeactivateVoucher(v.id)}
-                          className="p-2 bg-white/5 border border-white/5 hover:border-amber-500/20 hover:bg-amber-500/10 text-amber-500 rounded-lg transition-all cursor-pointer"
-                          title="Deactivate Voucher"
-                        >
-                          <ToggleLeft className="h-3 w-3 text-amber-500" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteVoucher(v.id)}
-                        className="p-2 bg-white/5 border border-white/5 hover:border-red-500/20 hover:bg-red-500/10 text-red-500 rounded-lg transition-all cursor-pointer"
-                        title="Delete Voucher"
-                      >
-                        <Trash2 className="h-3 w-3 text-red-500" />
-                      </button>
-                    </div>
+          {activeTab === 'voucher_generator' && (
+            <div className="space-y-6 animate-[fadeIn_0.2s_ease-out]">
+              {/* Introduction Header card */}
+              <GlassCard className="p-5 border-white/5 bg-gradient-to-br from-indigo-950/10 via-slate-900/10 to-teal-950/5">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-black uppercase tracking-wider text-teal-400 flex items-center gap-2">
+                      <Key className="h-5 w-5 text-teal-400" />
+                      WDV Voucher Generator
+                    </h4>
+                    <p className="text-[10px] text-slate-400 max-w-xl">
+                      Generate, manage, copy, and track secure, single-use cashout vouchers. 
+                      Vouchers remain fully valid until a successful user withdrawal. Generating a new voucher 
+                      <span className="text-teal-400 font-bold"> never invalidates</span> existing unused ones.
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[9px] font-mono text-slate-500">Unused Count:</span>
+                    <span className="px-2 py-0.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 rounded text-[9px] font-mono font-bold animate-pulse">
+                      {vouchers.filter(v => v.status === 'unused').length}
+                    </span>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
-      </GlassCard>
+              </GlassCard>
 
-      {/* Video Management Section */}
+              {/* Large Generation Button Component */}
+              <GlassCard className="p-6 border-white/5 text-center bg-slate-950/10 space-y-4">
+                <div className="max-w-md mx-auto space-y-4">
+                  <div className="p-3 bg-teal-500/10 text-teal-400 w-12 h-12 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                    <Key className="h-6 w-6" />
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <h3 className="text-xs font-mono text-slate-400 uppercase tracking-widest">Secure Master Vault</h3>
+                    <p className="text-[10px] text-slate-400">Generate a unique master voucher linked to the local SQL datastore.</p>
+                  </div>
+
+                  <button
+                    onClick={handleGenerateVoucher}
+                    disabled={generatingVoucher}
+                    className="w-full py-4 px-6 bg-gradient-to-r from-teal-500 via-emerald-500 to-indigo-600 hover:from-teal-600 hover:to-indigo-700 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl shadow-xl hover:shadow-teal-500/10 transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {generatingVoucher ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Generating Code...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4" />
+                        Generate New WDV Voucher
+                      </>
+                    )}
+                  </button>
+                  
+                  <p className="text-[8px] text-slate-500 font-mono">
+                    Format: WDV-XXXX-XXXX-XXXX • Stored in PostgreSQL/SQLite datastore with strict constraints.
+                  </p>
+                </div>
+              </GlassCard>
+
+              {/* Voucher Database & Search Section */}
+              <GlassCard className="p-4 border-white/5 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/5 pb-3 gap-3">
+                  <div>
+                    <h5 className="text-[10px] font-mono uppercase tracking-wider text-teal-400 font-bold">Voucher Datastore Ledger</h5>
+                    <p className="text-[9px] text-slate-400 mt-0.5">Filter records and execute administrative actions below</p>
+                  </div>
+                  
+                  {/* Voucher Search Box */}
+                  <div className="relative w-full md:w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search voucher codes, statuses..."
+                      value={voucherSearchTerm}
+                      onChange={(e) => setVoucherSearchTerm(e.target.value)}
+                      className="w-full text-xs pl-8.5 pr-3 py-2 rounded-xl border border-white/10 bg-slate-950/50 text-white focus:outline-none focus:ring-1 focus:ring-teal-400 font-sans"
+                    />
+                  </div>
+                </div>
+
+                {/* Voucher Data Table */}
+                <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20 no-scrollbar">
+                  <table className="w-full text-[11px] text-left border-collapse font-mono">
+                    <thead>
+                      <tr className="border-b border-white/5 text-[9px] text-slate-400 uppercase tracking-wider bg-white/[0.02]">
+                        <th className="px-4 py-3 font-bold">Voucher Code</th>
+                        <th className="px-3 py-3 font-bold">Status</th>
+                        <th className="px-3 py-3 font-bold">Created Date</th>
+                        <th className="px-3 py-3 font-bold">Used By</th>
+                        <th className="px-3 py-3 font-bold">Used Date</th>
+                        <th className="px-4 py-3 text-right font-bold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.03]">
+                      {loadingVouchers ? (
+                        <tr>
+                          <td colSpan={6} className="text-center py-12 text-slate-400 text-xs font-sans">
+                            <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-2 text-teal-400" />
+                            Loading master SQL voucher records...
+                          </td>
+                        </tr>
+                      ) : filteredVouchers.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="text-center py-12 text-slate-500 text-xs font-sans">
+                            No vouchers matching your search criteria.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredVouchers.map((v) => {
+                          const isUnused = v.status === 'unused';
+                          return (
+                            <tr key={v.id} className={`hover:bg-white/[0.01] transition-colors ${!isUnused ? 'opacity-65' : ''}`}>
+                              <td className="px-4 py-3.5 font-bold tracking-wider text-white whitespace-nowrap select-all">{v.voucherCode || v.code}</td>
+                              <td className="px-3 py-3.5 whitespace-nowrap">
+                                <span
+                                  className={`text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded ${
+                                    isUnused
+                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                      : 'bg-slate-850 text-slate-400 border border-white/5'
+                                  }`}
+                                >
+                                  {v.status}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3.5 text-slate-300 whitespace-nowrap text-[9px]">
+                                {v.createdAt || v.generatedAt ? new Date(v.createdAt || v.generatedAt).toLocaleString() : 'N/A'}
+                              </td>
+                              <td className="px-3 py-3.5 text-teal-400 whitespace-nowrap max-w-[120px] truncate" title={v.usedBy}>
+                                {v.usedBy || <span className="text-slate-600">-</span>}
+                              </td>
+                              <td className="px-3 py-3.5 text-slate-400 whitespace-nowrap text-[9px]">
+                                {v.usedAt ? new Date(v.usedAt).toLocaleString() : <span className="text-slate-600">-</span>}
+                              </td>
+                              <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(v.voucherCode || v.code);
+                                      onToast('Voucher code copied to clipboard!', 'success');
+                                    }}
+                                    className="p-1.5 bg-white/5 hover:bg-teal-500/10 border border-white/5 hover:border-teal-500/20 text-teal-400 rounded-lg transition-all cursor-pointer"
+                                    title="Copy Code"
+                                  >
+                                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                                  </button>
+                                  
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteVoucher(v.id)}
+                                    className="p-1.5 bg-white/5 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 text-red-500 rounded-lg transition-all cursor-pointer"
+                                    title="Delete Voucher"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </GlassCard>
+            </div>
+          )}
+
+          {activeTab === 'overview' && (
+            <>
+              {/* Video Management Section */}
       <GlassCard className="p-4 border-white/5 space-y-4">
         <div>
           <h5 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
@@ -1422,6 +1532,10 @@ export default function AdminPanel({
           )}
         </div>
       </GlassCard>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

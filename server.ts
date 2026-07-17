@@ -2206,6 +2206,127 @@ app.post('/api/admin/vouchers/deactivate', authenticateAdminToken, async (req, r
   }
 });
 
+// WDV Specific Endpoints as requested by user
+app.post('/api/admin/wdv/generate', authenticateAdminToken, async (req, res) => {
+  try {
+    let isUnique = false;
+    let code = '';
+    let attempts = 0;
+
+    while (!isUnique && attempts < 10) {
+      code = generateVoucherCode();
+      const existing = await getRow(`SELECT 1 FROM vouchers WHERE voucherCode = $1 OR code = $1`, [code]);
+      if (!existing) {
+        isUnique = true;
+      }
+      attempts++;
+    }
+
+    if (!isUnique) {
+      return res.status(500).json({ error: 'Failed to generate a unique voucher code.' });
+    }
+
+    const id = `v-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    const generatedAt = new Date().toISOString();
+
+    await execute(`
+      INSERT INTO vouchers (id, voucherCode, code, amount, status, usedBy, usedAt, generatedAt, withdrawalId, purchasedBy, redeemedBy)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [id, code, code, 6500, 'unused', '', '', generatedAt, '', 'admin', '[]']);
+
+    await loadDbCache();
+    logDiagnostic('SECURITY_ALERT', 'Admin generated new WDV voucher', { code });
+
+    res.json({
+      success: true,
+      voucher: {
+        id,
+        code,
+        voucherCode: code,
+        status: 'unused',
+        createdAt: generatedAt,
+        generatedAt,
+        usedBy: '',
+        usedAt: ''
+      }
+    });
+  } catch (err: any) {
+    console.error('Error generating voucher:', err);
+    res.status(500).json({ error: 'Failed to generate WDV voucher.' });
+  }
+});
+
+app.get('/api/admin/wdv', authenticateAdminToken, async (req, res) => {
+  try {
+    const rows = await getAllRows(`SELECT * FROM vouchers ORDER BY generatedAt DESC`);
+    const vouchers = rows.map(r => ({
+      id: r.id || r.vouchercode || r.code,
+      code: r.vouchercode || r.code,
+      voucherCode: r.vouchercode || r.code,
+      status: r.status,
+      createdAt: r.generatedat,
+      generatedAt: r.generatedat,
+      usedAt: r.usedat,
+      usedBy: r.usedby,
+      withdrawalId: r.withdrawalid,
+      purchasedBy: r.purchasedby
+    }));
+    res.json({ success: true, vouchers });
+  } catch (err: any) {
+    console.error('Error in GET /api/admin/wdv:', err);
+    res.status(500).json({ error: 'Failed to fetch WDV vouchers.' });
+  }
+});
+
+app.delete('/api/admin/wdv/:id', authenticateAdminToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const voucher = await getRow(`SELECT * FROM vouchers WHERE id = $1`, [id]);
+    if (!voucher) {
+      return res.status(404).json({ error: 'Voucher not found.' });
+    }
+    await execute(`DELETE FROM vouchers WHERE id = $1`, [id]);
+    await loadDbCache();
+    logDiagnostic('SECURITY_ALERT', 'Admin deleted WDV voucher', { code: voucher.vouchercode || voucher.code });
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error deleting voucher:', err);
+    res.status(500).json({ error: 'Failed to delete voucher.' });
+  }
+});
+
+app.post('/api/admin/wdv/verify', async (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ error: "Voucher code is required." });
+  }
+
+  const normVoucher = code.trim();
+  try {
+    const voucher = await getRow(`SELECT * FROM vouchers WHERE voucherCode = $1 OR code = $1`, [normVoucher]);
+    if (!voucher) {
+      return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+    }
+
+    if (voucher.status !== 'unused') {
+      return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+    }
+
+    res.json({
+      success: true,
+      message: "Voucher approved.",
+      voucher: {
+        id: voucher.id,
+        code: voucher.vouchercode || voucher.code,
+        status: voucher.status
+      }
+    });
+  } catch (err) {
+    console.error('Error verifying voucher:', err);
+    res.status(500).json({ error: "Invalid or already used WDV voucher." });
+  }
+});
+
 // List all users
 app.get('/api/admin/users', authenticateAdminToken, (req, res) => {
   const db = readDb();
