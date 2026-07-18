@@ -7,6 +7,12 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+}
+
 /* Custom glassmorphism helpers */
 .glass-panel-light {
   background: rgba(255, 255, 255, 0.6);

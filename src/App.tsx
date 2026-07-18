@@ -34,7 +34,8 @@ import {
   EyeOff,
   Tv,
   Zap,
-  Gamepad2
+  Gamepad2,
+  Wallet
 } from 'lucide-react';
 
 import { User, WdvCode, Transaction, NotificationItem } from './types';
@@ -428,6 +429,53 @@ export default function App() {
 
   // Offline/Online detection (Point 5)
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+
+  // Dynamic Device Detection & Screen Adaptation state
+  const [deviceType, setDeviceType] = useState<'mobile' | 'tablet' | 'laptop' | 'desktop' | 'large'>('mobile');
+  const [windowWidth, setWindowWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 375);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const width = window.innerWidth;
+      setWindowWidth(width);
+      if (width < 640) {
+        setDeviceType('mobile');
+      } else if (width < 1024) {
+        setDeviceType('tablet');
+      } else if (width < 1280) {
+        setDeviceType('laptop');
+      } else if (width < 1536) {
+        setDeviceType('desktop');
+      } else {
+        setDeviceType('large');
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
+
+  const getContainerClasses = () => {
+    switch (deviceType) {
+      case 'mobile':
+        return "w-full max-w-md h-screen bg-[#0c0c14] relative flex flex-col overflow-hidden transition-colors duration-300";
+      case 'tablet':
+        return "w-full max-w-3xl h-[92vh] bg-[#0c0c14] md:rounded-[24px] md:border-[6px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-all duration-300";
+      case 'laptop':
+        return "w-full max-w-5xl h-[92vh] bg-[#0c0c14] md:rounded-[32px] md:border-[8px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-all duration-300";
+      case 'desktop':
+        return "w-full max-w-6xl h-[94vh] bg-[#0c0c14] md:rounded-[40px] md:border-[8px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-all duration-300";
+      case 'large':
+        return "w-full max-w-7xl h-[94vh] bg-[#0c0c14] md:rounded-[44px] md:border-[10px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-all duration-300";
+      default:
+        return "w-full max-w-md h-screen md:h-[844px] bg-[#0c0c14] md:rounded-[40px] md:border-[8px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-colors duration-300";
+    }
+  };
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -1867,19 +1915,21 @@ export default function App() {
       <div className="hidden md:flex flex-col items-center mb-6 text-center">
         <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3.5 py-1.5 rounded-full mb-2">
           <Sparkles className="h-4.5 w-4.5 text-[#2dd4bf] animate-pulse" />
-          <span className="text-xs font-mono tracking-widest text-[#2dd4bf] uppercase">Premium Mobile Simulator</span>
+          <span className="text-xs font-mono tracking-widest text-[#2dd4bf] uppercase">
+            Active Mode: {deviceType === 'large' ? 'Large Monitor' : deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} ({deviceType === 'mobile' ? 'Full-screen' : 'Adaptive Screen Optimized'})
+          </span>
         </div>
         <h1 className="text-3xl font-black font-display tracking-tight bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] bg-clip-text text-transparent">
           SwiftPay Fintech Wallet
         </h1>
-        <p className="text-xs text-slate-400 mt-1">Elegant Dark Theme — Glassmorphism &amp; WDV Code System</p>
+        <p className="text-xs text-slate-400 mt-1">Smart Screen Adaptation — Dynamic Column &amp; Grid Matrix</p>
       </div>
 
       {/* Container holding mockup and side panels on large screens */}
-      <div className="flex flex-col xl:flex-row items-center justify-center gap-8 max-w-7xl w-full">
+      <div className={`flex flex-col ${deviceType !== 'mobile' && deviceType !== 'tablet' ? 'xl:flex-row' : ''} items-center justify-center gap-6 md:gap-8 ${deviceType === 'mobile' ? 'w-full px-0' : 'max-w-full xl:max-w-[1600px] w-full px-4 md:px-8'}`}>
         
-        {/* Left Side Panel (Hidden on mobile, beautiful on desktop) */}
-        <div className="hidden xl:flex flex-col w-[300px] shrink-0 gap-6">
+        {/* Left Side Panel (Hidden on mobile/laptop/desktop dashboards, as they are integrated inside) */}
+        <div className={`hidden ${!isAuthenticated && (deviceType === 'desktop' || deviceType === 'large') ? 'xl:flex' : 'hidden'} flex-col w-[300px] shrink-0 gap-6`}>
           <GlassCard className="p-6 space-y-4 border border-white/[0.08] bg-white/[0.04]">
             <div className="inline-block self-start px-2.5 py-1 rounded-lg bg-[#115e59] text-[#2dd4bf] text-[10px] font-black uppercase tracking-wider">
               SwiftPay Exclusive
@@ -1907,7 +1957,7 @@ export default function App() {
         {/* Main Core Viewport Simulator */}
         <div
           id="swiftpay-mobile-container"
-          className="w-full max-w-md h-screen md:h-[844px] bg-[#0c0c14] md:rounded-[40px] md:border-[8px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-colors duration-300"
+          className={getContainerClasses()}
         >
         {/* Offline Banner Indicator (Point 5) */}
         {!isOnline && (
@@ -2248,218 +2298,304 @@ export default function App() {
 
         {/* -------------------- MAIN DASHBOARD WRAPPER -------------------- */}
         {isAuthenticated && currentScreen !== 'congratulations' && (
-          <div className="flex-1 flex flex-col justify-between h-full relative overflow-hidden bg-[#0c0c14] text-white">
+          <div className="flex-1 flex flex-row h-full relative overflow-hidden bg-[#0c0c14] text-white">
             
-            {/* Top Navigation Header */}
-            <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between bg-[#0c0c14]/80 backdrop-blur-md relative z-10 shrink-0">
-              <div className="flex items-center gap-3">
+            {/* Expanded Persistent Sidebar for Tablets, Laptops, Desktops, and Large Screens */}
+            {(deviceType === 'laptop' || deviceType === 'desktop' || deviceType === 'large') && (
+              <div className="w-[260px] shrink-0 border-r border-white/5 bg-[#07070b]/60 backdrop-blur-md p-5 flex flex-col justify-between z-20">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                    <div>
+                      <span className="text-xl font-black font-display bg-gradient-to-r from-indigo-400 to-teal-300 bg-clip-text text-transparent">
+                        SwiftPay
+                      </span>
+                      <span className="text-[8px] font-mono text-slate-400 block uppercase tracking-widest mt-0.5">Version 4.1.0</span>
+                    </div>
+                  </div>
+
+                  {/* Navigation Links */}
+                  <div className="space-y-1.5">
+                    {[
+                      { label: 'Wallet Dashboard', screen: 'dashboard', icon: Wallet },
+                      { label: 'Buy WDV Voucher', screen: 'buy_wdv', icon: CreditCard },
+                      { label: 'Purchase Airtime', screen: 'buy_airtime', icon: Smartphone },
+                      { label: 'Purchase Data Bundles', screen: 'buy_data', icon: Smartphone },
+                      { label: 'Transfer To Banks', screen: 'transfer_bank', icon: Landmark },
+                      { label: 'Support Live Chat', screen: 'support_live_chat', icon: MessageSquare },
+                      { label: 'Help FAQs Hub', screen: 'faq', icon: HelpCircle },
+                      { label: 'Our Brand Story', screen: 'about_info', icon: Info }
+                    ].map((item) => {
+                      const Icon = item.icon;
+                      const isCurrent = currentScreen === item.screen;
+                      return (
+                        <button
+                          id={`sidebar-link-${item.screen}`}
+                          key={item.screen}
+                          onClick={() => {
+                            setCurrentScreen(item.screen);
+                            if (item.screen === 'dashboard') {
+                              setActiveTab('wallet');
+                            }
+                          }}
+                          className={`w-full p-3 rounded-xl flex items-center gap-3.5 text-left text-xs font-semibold transition-all cursor-pointer ${
+                            isCurrent
+                              ? 'bg-gradient-to-r from-teal-500/10 to-indigo-500/10 border border-teal-500/25 text-teal-400 shadow-[0_4px_25px_rgba(20,184,166,0.06)]'
+                              : 'text-slate-400 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <Icon className="h-4.5 w-4.5" />
+                          <span>{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="border-t border-white/5 pt-4">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold uppercase tracking-wider rounded-xl text-center block transition-all"
+                  >
+                    Logout Session
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Main view container containing top-bar and actual tab routes */}
+            <div className="flex-1 flex flex-col justify-between h-full relative overflow-hidden bg-[#0c0c14]">
+              {/* Top Navigation Header */}
+              <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between bg-[#0c0c14]/80 backdrop-blur-md relative z-10 shrink-0">
+                <div className="flex items-center gap-3">
+                  {(deviceType === 'mobile' || deviceType === 'tablet') && (
+                    <button
+                      id="btn-sidebar-toggle"
+                      onClick={() => setIsSidebarOpen(true)}
+                      className="p-1.5 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                    >
+                      <Menu className="h-5 w-5" />
+                    </button>
+                  )}
+                  <span className="text-xl font-extrabold font-display bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] bg-clip-text text-transparent">
+                    SwiftPay
+                  </span>
+
+                  {/* Adaptive Device Layout Detected Badge */}
+                  <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full shadow-inner">
+                    <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
+                    <span className="text-[8px] md:text-[9px] font-mono text-[#2dd4bf] uppercase tracking-wider font-bold">
+                      {deviceType === 'mobile' && 'Mobile Phone'}
+                      {deviceType === 'tablet' && 'Tablet Optimized'}
+                      {deviceType === 'laptop' && 'Laptop Console'}
+                      {deviceType === 'desktop' && 'Desktop Monitor'}
+                      {deviceType === 'large' && 'Large Display'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Right Notification Bell with badge */}
                 <button
-                  id="btn-sidebar-toggle"
-                  onClick={() => setIsSidebarOpen(true)}
-                  className="p-1.5 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                  id="btn-notif-toggle"
+                  onClick={() => setIsNotificationsOpen(true)}
+                  className="p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white relative transition-colors"
                 >
-                  <Menu className="h-5 w-5" />
+                  <Bell className="h-5 w-5" />
+                  {notifications.filter(n => n.unread).length > 0 && (
+                    <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-slate-50 dark:border-slate-950 animate-bounce" />
+                  )}
                 </button>
-                <span className="text-xl font-extrabold font-display bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] bg-clip-text text-transparent">
-                  SwiftPay
-                </span>
               </div>
 
-              {/* Right Notification Bell with badge */}
-              <button
-                id="btn-notif-toggle"
-                onClick={() => setIsNotificationsOpen(true)}
-                className="p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white relative transition-colors"
-              >
-                <Bell className="h-5 w-5" />
-                {notifications.filter(n => n.unread).length > 0 && (
-                  <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-slate-50 dark:border-slate-950 animate-bounce" />
-                )}
-              </button>
-            </div>
-
-            <LiveTicker />
+              <LiveTicker />
 
             {/* Main scrollable view containers based on Current Screen & Tab */}
             <div className="flex-1 overflow-y-auto no-scrollbar pb-6">
               
               {/* -------------------- SUB-VIEW: HOME DASHBOARD (wallet tab) -------------------- */}
               {currentScreen === 'dashboard' && activeTab === 'wallet' && (
-                <div className="p-5 space-y-5 animate-[fadeIn_0.2s_ease-out]">
-                  
-                  {/* Greeting Block */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-lg font-bold font-display text-slate-800 dark:text-white">Hi, {user?.fullName.split(' ')[0] || 'Adebayo'}</h4>
-                      <p className="text-xs text-slate-400 mt-0.5">Welcome back, transact cheaper today.</p>
-                    </div>
-                    {/* User Avatar */}
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-500 to-teal-400 p-0.5 shadow-md">
-                      <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center text-xs font-black text-white">
-                        {user?.fullName.split(' ').map(n => n[0]).join('') || 'AS'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* GLASSMORPHISM BALANCE CARD */}
-                  <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-teal-500 p-6 text-white shadow-xl shadow-indigo-500/20">
-                    {/* Gloss glass glow elements */}
-                    <div className="absolute -right-16 -top-16 w-44 h-44 rounded-full bg-white/10 blur-2xl" />
-                    <div className="absolute -left-16 -bottom-16 w-36 h-36 rounded-full bg-teal-300/10 blur-2xl" />
-
-                    <div className="relative z-10 flex items-center justify-between">
-                      <span className="text-[10px] tracking-widest uppercase font-mono text-indigo-100">Available Balance</span>
-                      <span className="text-[10px] tracking-wide font-mono px-2 py-0.5 bg-white/20 rounded-full">Basic Tier</span>
-                    </div>
-
-                    <div className="relative z-10 my-4">
-                      <span className="text-3xl font-bold font-display tracking-tight">
-                        {nairaFormat(user?.balance || 200000)}
-                      </span>
-                    </div>
-
-                    <div className="relative z-10 border-t border-white/20 pt-4 flex items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between text-[10px] text-indigo-100 mb-1.5 font-mono">
-                          <span>Daily Spend Target</span>
-                          <span>{nairaFormat(user?.dailySpent || 0)} / {nairaFormat(user?.dailyTarget || 50000)}</span>
+                <div className="p-5 animate-[fadeIn_0.2s_ease-out]">
+                  <div className={`gap-6 ${deviceType !== 'mobile' ? 'grid grid-cols-1 lg:grid-cols-12 items-start' : 'space-y-5'}`}>
+                    
+                    {/* Left Column: Balance, Greeting, Services */}
+                    <div className={`${deviceType !== 'mobile' ? 'lg:col-span-7 space-y-6' : 'space-y-5'}`}>
+                      {/* Greeting Block */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-lg font-bold font-display text-slate-800 dark:text-white">Hi, {user?.fullName.split(' ')[0] || 'Adebayo'}</h4>
+                          <p className="text-xs text-slate-400 mt-0.5">Welcome back, transact cheaper today.</p>
                         </div>
-                        {/* Progress Bar */}
-                        <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-teal-300 transition-all duration-500"
-                            style={{ width: `${Math.min(100, ((user?.dailySpent || 0) / (user?.dailyTarget || 50000)) * 100)}%` }}
-                          />
+                        {/* User Avatar */}
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-500 to-teal-400 p-0.5 shadow-md">
+                          <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center text-xs font-black text-white">
+                            {user?.fullName.split(' ').map(n => n[0]).join('') || 'AS'}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Direct Withdraw Trigger */}
-                      <button
-                        id="btn-withdraw-trigger"
-                        onClick={() => setIsWithdrawOpen(true)}
-                        className="py-2.5 px-4 rounded-xl bg-white text-indigo-600 hover:bg-slate-100 text-xs font-bold shadow-sm active:scale-95 transition-all shrink-0"
-                      >
-                        Withdraw
-                      </button>
-                    </div>
-                  </div>
+                      {/* GLASSMORPHISM BALANCE CARD */}
+                      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-teal-500 p-6 text-white shadow-xl shadow-indigo-500/20">
+                        {/* Gloss glass glow elements */}
+                        <div className="absolute -right-16 -top-16 w-44 h-44 rounded-full bg-white/10 blur-2xl" />
+                        <div className="absolute -left-16 -bottom-16 w-36 h-36 rounded-full bg-teal-300/10 blur-2xl" />
 
-                  {/* QUICK ACTIONS GRID (4 Circle Icons) */}
-                  <div>
-                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3.5">Quick Actions</h5>
-                    <div className="grid grid-cols-4 gap-3.5">
-                      {[
-                        { id: 'social', label: 'Platform', icon: MessageSquare, bg: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400' },
-                        { id: 'wdv', label: 'Buy WDV', icon: CreditCard, bg: 'bg-teal-500/10 text-teal-600 dark:bg-teal-500/15 dark:text-teal-400' },
-                        { id: 'guide', label: 'Watch Guide', icon: Clock, bg: 'bg-violet-500/10 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400' },
-                        { id: 'airtime', label: 'Airtime', icon: Smartphone, bg: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400' }
-                      ].map((act) => (
-                        <button
-                          id={`btn-action-${act.id}`}
-                          key={act.id}
-                          onClick={() => {
-                            if (act.id === 'social') {
-                              setActiveTab('social');
-                            } else if (act.id === 'wdv') {
-                              setCurrentScreen('buy_wdv');
-                            } else if (act.id === 'guide') {
-                              setIsGuideOpen(true);
-                            } else if (act.id === 'airtime') {
-                              setCurrentScreen('buy_airtime');
-                            }
-                          }}
-                          className="flex flex-col items-center group cursor-pointer"
-                        >
-                          <div className={`h-12 w-12 rounded-2xl flex items-center justify-center border border-transparent dark:border-white/5 shadow-sm mb-2 transition-all group-hover:scale-105 active:scale-95 ${act.bg}`}>
-                            <act.icon className="h-5 w-5" />
-                          </div>
-                          <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 text-center">
-                            {act.label}
+                        <div className="relative z-10 flex items-center justify-between">
+                          <span className="text-[10px] tracking-widest uppercase font-mono text-indigo-100">Available Balance</span>
+                          <span className="text-[10px] tracking-wide font-mono px-2 py-0.5 bg-white/20 rounded-full">Basic Tier</span>
+                        </div>
+
+                        <div className="relative z-10 my-4">
+                          <span className="text-3xl font-bold font-display tracking-tight">
+                            {nairaFormat(user?.balance || 200000)}
                           </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                        </div>
 
-                  {/* MORE SERVICES GRID (4 columns) */}
-                  <div>
-                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3.5">More Services</h5>
-                    <div className="grid grid-cols-4 gap-3">
-                      {[
-                        { id: 'data', label: 'Data bundles', icon: Smartphone, bg: 'bg-orange-500/10 text-orange-500' },
-                        { id: 'bills', label: 'Pay Bills', icon: CreditCard, bg: 'bg-emerald-500/10 text-emerald-500' },
-                        { id: 'support', label: 'Support Chat', icon: MessageSquare, bg: 'bg-rose-500/10 text-rose-500' },
-                        { id: 'about', label: 'About App', icon: Info, bg: 'bg-blue-500/10 text-blue-500' }
-                      ].map((srv) => (
-                        <button
-                          id={`btn-service-${srv.id}`}
-                          key={srv.id}
-                          onClick={() => {
-                            if (srv.id === 'data') {
-                              setCurrentScreen('buy_data');
-                            } else if (srv.id === 'bills') {
-                              setCurrentScreen('pay_bills');
-                            } else if (srv.id === 'support') {
-                              setCurrentScreen('support_live_chat');
-                            } else if (srv.id === 'about') {
-                              setCurrentScreen('about_info');
-                            }
-                          }}
-                          className="p-3 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex flex-col items-center hover:bg-white/60 dark:hover:bg-slate-900/80 active:scale-95 transition-all text-center"
-                        >
-                          <div className={`p-2 rounded-xl mb-1.5 ${srv.bg}`}>
-                            <srv.icon className="h-4.5 w-4.5" />
+                        <div className="relative z-10 border-t border-white/20 pt-4 flex items-center justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between text-[10px] text-indigo-100 mb-1.5 font-mono">
+                              <span>Daily Spend Target</span>
+                              <span>{nairaFormat(user?.dailySpent || 0)} / {nairaFormat(user?.dailyTarget || 50000)}</span>
+                            </div>
+                            {/* Progress Bar */}
+                            <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-teal-300 transition-all duration-500"
+                                style={{ width: `${Math.min(100, ((user?.dailySpent || 0) / (user?.dailyTarget || 50000)) * 100)}%` }}
+                              />
+                            </div>
                           </div>
-                          <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase leading-none">
-                            {srv.label.split(' ')[0]}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
 
-                  {/* RECENT WDV VOUCHERS LIST */}
-                  {vouchers.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-3.5">
-                        <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">My Active WDV Codes</h5>
-                        <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-teal-400">
-                          {vouchers.filter(v => v.status === 'unused').length} Unused
-                        </span>
+                          {/* Direct Withdraw Trigger */}
+                          <button
+                            id="btn-withdraw-trigger"
+                            onClick={() => setIsWithdrawOpen(true)}
+                            className="py-2.5 px-4 rounded-xl bg-white text-indigo-600 hover:bg-slate-100 text-xs font-bold shadow-sm active:scale-95 transition-all shrink-0"
+                          >
+                            Withdraw
+                          </button>
+                        </div>
                       </div>
-                      <div className="space-y-3.5">
-                        {vouchers.map(vouch => (
-                          <WdvVoucher
-                            key={vouch.id}
-                            voucher={vouch}
-                            onRedeemAirtime={(code) => handleQuickRedeemWdv(code, 'airtime')}
-                            onRedeemTransfer={(code) => handleQuickRedeemWdv(code, 'transfer')}
-                          />
-                        ))}
+
+                      {/* QUICK ACTIONS GRID (4 Circle Icons) */}
+                      <div>
+                        <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3.5">Quick Actions</h5>
+                        <div className="grid grid-cols-4 gap-3.5">
+                          {[
+                            { id: 'social', label: 'Platform', icon: MessageSquare, bg: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400' },
+                            { id: 'wdv', label: 'Buy WDV', icon: CreditCard, bg: 'bg-teal-500/10 text-teal-600 dark:bg-teal-500/15 dark:text-teal-400' },
+                            { id: 'guide', label: 'Watch Guide', icon: Clock, bg: 'bg-violet-500/10 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400' },
+                            { id: 'airtime', label: 'Airtime', icon: Smartphone, bg: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400' }
+                          ].map((act) => (
+                            <button
+                              id={`btn-action-${act.id}`}
+                              key={act.id}
+                              onClick={() => {
+                                if (act.id === 'social') {
+                                  setActiveTab('social');
+                                } else if (act.id === 'wdv') {
+                                  setCurrentScreen('buy_wdv');
+                                } else if (act.id === 'guide') {
+                                  setIsGuideOpen(true);
+                                } else if (act.id === 'airtime') {
+                                  setCurrentScreen('buy_airtime');
+                                }
+                              }}
+                              className="flex flex-col items-center group cursor-pointer"
+                            >
+                              <div className={`h-12 w-12 rounded-2xl flex items-center justify-center border border-transparent dark:border-white/5 shadow-sm mb-2 transition-all group-hover:scale-105 active:scale-95 ${act.bg}`}>
+                                <act.icon className="h-5 w-5" />
+                              </div>
+                              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 text-center">
+                                {act.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* MORE SERVICES GRID (4 columns) */}
+                      <div>
+                        <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3.5">More Services</h5>
+                        <div className="grid grid-cols-4 gap-3">
+                          {[
+                            { id: 'data', label: 'Data bundles', icon: Smartphone, bg: 'bg-orange-500/10 text-orange-500' },
+                            { id: 'bills', label: 'Pay Bills', icon: CreditCard, bg: 'bg-emerald-500/10 text-emerald-500' },
+                            { id: 'support', label: 'Support Chat', icon: MessageSquare, bg: 'bg-rose-500/10 text-rose-500' },
+                            { id: 'about', label: 'About App', icon: Info, bg: 'bg-blue-500/10 text-blue-500' }
+                          ].map((srv) => (
+                            <button
+                              id={`btn-service-${srv.id}`}
+                              key={srv.id}
+                              onClick={() => {
+                                if (srv.id === 'data') {
+                                  setCurrentScreen('buy_data');
+                                } else if (srv.id === 'bills') {
+                                  setCurrentScreen('pay_bills');
+                                } else if (srv.id === 'support') {
+                                  setCurrentScreen('support_live_chat');
+                                } else if (srv.id === 'about') {
+                                  setCurrentScreen('about_info');
+                                }
+                              }}
+                              className="p-3 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex flex-col items-center hover:bg-white/60 dark:hover:bg-slate-900/80 active:scale-95 transition-all text-center w-full"
+                            >
+                              <div className={`p-2 rounded-xl mb-1.5 ${srv.bg}`}>
+                                <srv.icon className="h-4.5 w-4.5" />
+                              </div>
+                              <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase leading-none">
+                                {srv.label.split(' ')[0]}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  )}
 
-                  {/* RECENT TRANSACTIONS PREVIEW */}
-                  <div className="pt-2">
-                    <div className="flex items-center justify-between mb-3.5">
-                      <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">Recent Transactions</h5>
-                      <button
-                        id="btn-view-all-tx"
-                        onClick={() => setCurrentScreen('transactions_all')}
-                        className="text-[10px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
-                      >
-                        View All
-                      </button>
+                    {/* Right Column: Active Vouchers, Recent Transactions */}
+                    <div className={`${deviceType !== 'mobile' ? 'lg:col-span-5 space-y-6 mt-6 lg:mt-0' : 'space-y-5'}`}>
+                      {/* RECENT WDV VOUCHERS LIST */}
+                      {vouchers.length > 0 && (
+                        <div>
+                          <div className="flex items-center justify-between mb-3.5">
+                            <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">My Active WDV Codes</h5>
+                            <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-teal-400">
+                              {vouchers.filter(v => v.status === 'unused').length} Unused
+                            </span>
+                          </div>
+                          <div className="space-y-3.5">
+                            {vouchers.map(vouch => (
+                              <WdvVoucher
+                                key={vouch.id}
+                                voucher={vouch}
+                                onRedeemAirtime={(code) => handleQuickRedeemWdv(code, 'airtime')}
+                                onRedeemTransfer={(code) => handleQuickRedeemWdv(code, 'transfer')}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* RECENT TRANSACTIONS PREVIEW */}
+                      <div className="pt-2">
+                        <div className="flex items-center justify-between mb-3.5">
+                          <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">Recent Transactions</h5>
+                          <button
+                            id="btn-view-all-tx"
+                            onClick={() => setCurrentScreen('transactions_all')}
+                            className="text-[10px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
+                          >
+                            View All
+                          </button>
+                        </div>
+
+                        <TransactionList
+                          transactions={transactions}
+                          limit={4}
+                          onViewDetails={setSelectedReceiptTx}
+                        />
+                      </div>
                     </div>
 
-                    <TransactionList
-                      transactions={transactions}
-                      limit={4}
-                      onViewDetails={setSelectedReceiptTx}
-                    />
                   </div>
-
                 </div>
               )}
 
@@ -3026,7 +3162,7 @@ export default function App() {
 
               {/* -------------------- FLOW 5: BUY AIRTIME SCREEN -------------------- */}
               {currentScreen === 'buy_airtime' && (
-                <div className="p-5 space-y-4 animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-[600px] no-scrollbar">
+                <div className="p-5 space-y-4 animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-full min-h-[500px] no-scrollbar pb-10">
                   <div className="flex items-center gap-3">
                     <button
                       id="btn-airtime-back"
@@ -3250,7 +3386,7 @@ export default function App() {
 
               {/* -------------------- FLOW 5.1: POLISHED DEDICATED DATA PURCHASE SCREEN (Point 12) -------------------- */}
               {currentScreen === 'buy_data' && (
-                <div className="p-5 space-y-4 animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-[600px] no-scrollbar">
+                <div className="p-5 space-y-4 animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-full min-h-[500px] no-scrollbar pb-10">
                   <div className="flex items-center gap-3">
                     <button
                       id="btn-data-back"
@@ -3519,7 +3655,7 @@ export default function App() {
 
               {/* -------------------- FLOW 5.2: PAY BILLS SCREEN -------------------- */}
               {currentScreen === 'pay_bills' && (
-                <div className="p-5 space-y-4 animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-[600px] no-scrollbar">
+                <div className="p-5 space-y-4 animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-full min-h-[500px] no-scrollbar pb-10">
                   <div className="flex items-center gap-3">
                     <button
                       id="btn-bills-back"
@@ -4117,7 +4253,7 @@ export default function App() {
 
               {/* -------------------- VIEW 3.7: SECURITY AUDITS / DEVICES (Point 1) -------------------- */}
               {currentScreen === 'security_audits' && (
-                <div className="animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-[600px] no-scrollbar">
+                <div className="animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-full min-h-[500px] no-scrollbar pb-10">
                   <DevicesHistory
                     devices={devices}
                     onLogoutDevice={(id) => {
@@ -4139,7 +4275,7 @@ export default function App() {
 
               {/* -------------------- VIEW 3.8: ADMIN PANEL (Point 10) -------------------- */}
               {(currentScreen === 'admin' || currentScreen === 'admin_dashboard') && (
-                <div className="animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-[600px] no-scrollbar">
+                <div className="animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-full min-h-[500px] no-scrollbar pb-10">
                   <AdminPanel
                     currentUserEmail={user?.email || 'admin@swiftpay.com'}
                     transactions={transactions}
@@ -4627,6 +4763,7 @@ export default function App() {
               </div>
             )}
 
+            </div>
           </div>
         )}
 
@@ -4775,8 +4912,8 @@ export default function App() {
 
         </div>
 
-        {/* Right Side Panel (Hidden on mobile, beautiful on desktop) */}
-        <div className="hidden xl:flex flex-col w-[300px] shrink-0 gap-6">
+        {/* Right Side Panel (Hidden on mobile/laptop/desktop dashboards, as they are integrated inside) */}
+        <div className={`hidden ${!isAuthenticated && (deviceType === 'desktop' || deviceType === 'large') ? 'xl:flex' : 'hidden'} flex-col w-[300px] shrink-0 gap-6`}>
           <GlassCard className="p-6 space-y-4 border border-white/[0.08] bg-white/[0.04]">
             <h3 className="text-xl font-bold font-display text-white border-b border-white/5 pb-2">
               Bank Transfer
