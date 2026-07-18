@@ -1223,8 +1223,6 @@ const BANK_NAME_TO_CODE: Record<string, string> = {
   "Zenith Bank Plc": "057"
 };
 
-const MASTER_WDV_CODES = ['WDV-7674-2206-6501', 'WDV-9001-3029-8675'];
-
 async function verifyAndConsumeVoucherSql(voucherCode: string | undefined, email: string, transactionId: string): Promise<{ error?: string }> {
   const norm = (voucherCode || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!norm) {
@@ -1235,16 +1233,16 @@ async function verifyAndConsumeVoucherSql(voucherCode: string | undefined, email
   let voucher;
   try {
     if (isPostgres) {
-      voucher = await getRow(`SELECT * FROM vouchers WHERE UPPER(REPLACE(voucherCode, '-', '')) = $1 FOR UPDATE`, [norm]);
+      voucher = await getRow(`SELECT * FROM vouchers WHERE UPPER(REPLACE(voucherCode, '-', '')) = $1 OR UPPER(REPLACE(code, '-', '')) = $1 FOR UPDATE`, [norm]);
     } else {
-      voucher = await getRow(`SELECT * FROM vouchers WHERE UPPER(REPLACE(voucherCode, '-', '')) = $1`, [norm]);
+      voucher = await getRow(`SELECT * FROM vouchers WHERE UPPER(REPLACE(voucherCode, '-', '')) = $1 OR UPPER(REPLACE(code, '-', '')) = $1`, [norm]);
     }
   } catch (err: any) {
     console.error('Error selecting voucher in verification:', err);
   }
 
   if (!voucher) {
-    return { error: "Invalid WDV voucher." };
+    return { error: "Invalid or already used WDV voucher." };
   }
 
   if (voucher.status !== 'unused') {
@@ -1256,8 +1254,8 @@ async function verifyAndConsumeVoucherSql(voucherCode: string | undefined, email
     await execute(`
       UPDATE vouchers
       SET status = $1, usedAt = $2, usedBy = $3, withdrawalId = $4
-      WHERE id = $5 OR voucherCode = $6 OR code = $7
-    `, ['used', now, email.toLowerCase(), transactionId, voucher.id, voucher.vouchercode || voucher.code || voucher.voucherCode, voucher.vouchercode || voucher.code || voucher.voucherCode]);
+      WHERE id = $5
+    `, ['used', now, email.toLowerCase(), transactionId, voucher.id]);
   } catch (err: any) {
     console.error('Error updating voucher status in SQL:', err);
     return { error: "Failed to consume voucher in SQL database." };
@@ -1268,93 +1266,36 @@ async function verifyAndConsumeVoucherSql(voucherCode: string | undefined, email
   return {}; // Success
 }
 
-const isVoucherValid = (code: string | undefined, db: DBStructure, email?: string): boolean => {
-  if (!code) return false;
-  const norm = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const isMaster = MASTER_WDV_CODES.some(c => c.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
-  if (!isMaster) return false;
-
-  const voucher = db.vouchers.find((v: any) => v.code.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
-  if (!voucher) return true;
-
-  if (email) {
-    const redeemedBy = voucher.redeemedBy || [];
-    if (redeemedBy.map((e: string) => e.toLowerCase().trim()).includes(email.toLowerCase().trim())) {
-      return false;
-    }
-  }
-  return true;
-};
-
-const activateVoucherAndVerifyUser = (voucherCode: string | undefined, userEmail: string, db: DBStructure): { error?: string, user?: UserState } => {
-  if (!voucherCode) {
-    return { error: "Please enter a WDV voucher code." };
-  }
-  const norm = voucherCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const isMaster = MASTER_WDV_CODES.some(c => c.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
-  
-  if (!isMaster) {
-    return { error: "Invalid voucher code. Only master WDV vouchers are valid." };
-  }
-
-  let voucher = db.vouchers.find((v: any) => v.code.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
-  if (!voucher) {
-    const originalCode = MASTER_WDV_CODES.find(c => c.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm) || voucherCode.toUpperCase();
-    voucher = {
-      code: originalCode,
-      amount: 6500,
-      status: 'unused',
-      usedBy: '',
-      usedAt: '',
-      redeemedBy: []
-    };
-    db.vouchers.push(voucher);
-  }
-
-  voucher.redeemedBy = voucher.redeemedBy || [];
-  const lowerEmail = userEmail.toLowerCase().trim();
-
-  if (voucher.redeemedBy.map((e: string) => e.toLowerCase().trim()).includes(lowerEmail)) {
-    return { error: "You have already used this voucher." };
-  }
-
-  voucher.redeemedBy.push(lowerEmail);
-
-  const user = db.users.find(u => u.email.toLowerCase() === lowerEmail);
-  if (!user) {
-    return { error: "User profile not found." };
-  }
-
-  user.wdvVerified = true;
-  user.tier = 2; // Set Level 2 Verification
-
-  return { user };
-};
-
-// Verify Voucher
-app.post('/api/auth/verify-voucher', (req, res) => {
+// Verify Voucher (Strict SQL DB source of truth only)
+app.post('/api/auth/verify-voucher', async (req, res) => {
   const { voucherCode, email } = req.body;
   if (!voucherCode) {
     return res.status(400).json({ error: 'Please enter a voucher code.' });
   }
 
-  const db = readDb();
-  if (isVoucherValid(voucherCode, db, email)) {
-    const config = db.wdvConfig || DEFAULT_WDV_CONFIG;
-    return res.json({ success: true, amount: config.voucherPrice });
-  } else {
-    logDiagnostic('API_ERROR', 'Invalid voucher code attempt', { voucherCode, email });
-    const norm = voucherCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const isMaster = MASTER_WDV_CODES.some(c => c.toUpperCase().replace(/[^A-Z0-9]/g, '') === norm);
-    if (!isMaster) {
-      return res.status(400).json({ error: 'Invalid voucher code. Only master WDV vouchers are valid.' });
+  const norm = voucherCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  try {
+    const voucher = await getRow(`SELECT * FROM vouchers WHERE UPPER(REPLACE(voucherCode, '-', '')) = $1 OR UPPER(REPLACE(code, '-', '')) = $1`, [norm]);
+    if (!voucher || voucher.status !== 'unused') {
+      return res.status(400).json({ error: 'Invalid or already used WDV voucher.' });
     }
-    return res.status(400).json({ error: 'You have already used this voucher.' });
+
+    const redeemedBy = safeParseJson(voucher.redeemedby || voucher.redeemedBy, []);
+    if (email && redeemedBy.map((e: string) => e.toLowerCase().trim()).includes(email.toLowerCase().trim())) {
+      return res.status(400).json({ error: 'You have already used this voucher.' });
+    }
+
+    const db = readDb();
+    const config = db.wdvConfig || DEFAULT_WDV_CONFIG;
+    return res.json({ success: true, amount: config.voucherPrice || voucher.amount || 6500 });
+  } catch (err) {
+    console.error('Error in verify-voucher:', err);
+    return res.status(500).json({ error: 'Internal server error validating voucher.' });
   }
 });
 
-// Activate Voucher
-app.post('/api/auth/activate-voucher', authenticateToken, (req: any, res) => {
+// Activate Voucher (Strict SQL DB source of truth only)
+app.post('/api/auth/activate-voucher', authenticateToken, async (req: any, res) => {
   const { voucherCode } = req.body;
   const email = req.userEmail;
 
@@ -1362,21 +1303,50 @@ app.post('/api/auth/activate-voucher', authenticateToken, (req: any, res) => {
     return res.status(400).json({ error: "Please enter a WDV voucher code." });
   }
 
-  const db = readDb();
-  const result = activateVoucherAndVerifyUser(voucherCode, email, db);
+  const norm = voucherCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  try {
+    const voucher = await getRow(`SELECT * FROM vouchers WHERE UPPER(REPLACE(voucherCode, '-', '')) = $1 OR UPPER(REPLACE(code, '-', '')) = $1`, [norm]);
+    if (!voucher || voucher.status !== 'unused') {
+      return res.status(400).json({ error: "Invalid or already used WDV voucher." });
+    }
 
-  if (result.error) {
-    return res.status(400).json({ error: result.error });
+    const redeemedBy = safeParseJson(voucher.redeemedby || voucher.redeemedBy, []);
+    const lowerEmail = email.toLowerCase().trim();
+    if (redeemedBy.map((e: string) => e.toLowerCase().trim()).includes(lowerEmail)) {
+      return res.status(400).json({ error: "You have already used this voucher." });
+    }
+
+    redeemedBy.push(lowerEmail);
+    const now = new Date().toISOString();
+
+    await execute(`
+      UPDATE vouchers
+      SET status = $1, usedAt = $2, usedBy = $3, redeemedBy = $4
+      WHERE id = $5
+    `, ['used', now, lowerEmail, JSON.stringify(redeemedBy), voucher.id]);
+
+    const db = readDb();
+    const user = db.users.find(u => u.email.toLowerCase() === lowerEmail);
+    if (!user) {
+      return res.status(400).json({ error: "User profile not found." });
+    }
+
+    user.wdvVerified = true;
+    user.tier = 2; // Set Level 2 Verification
+    writeDb(db);
+    await loadDbCache();
+
+    logDiagnostic('INFO', 'User activated WDV voucher', { email, voucherCode });
+
+    res.json({
+      success: true,
+      message: "WDV Voucher activated successfully. Your account is now WDV Verified!",
+      user
+    });
+  } catch (err) {
+    console.error('Error in activate-voucher:', err);
+    return res.status(500).json({ error: 'Internal server error activating voucher.' });
   }
-
-  writeDb(db);
-  logDiagnostic('INFO', 'User activated WDV voucher', { email, voucherCode });
-
-  res.json({
-    success: true,
-    message: "WDV Voucher activated successfully. Your account is now WDV Verified!",
-    user: result.user
-  });
 });
 
 // Transaction endpoint for Airtime Purchase
@@ -1774,7 +1744,7 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
     type: 'withdraw',
     amount: price,
     date: new Date().toISOString(),
-    status: 'success',
+    status: 'pending',
     description: `Withdrew ₦${price.toLocaleString()} to ${bank} (${resolvedName})`,
     recipientAccount: accountNumber,
     recipientBank: bank,
@@ -1789,14 +1759,42 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
   refreshedUser.notifications = refreshedUser.notifications || [];
   refreshedUser.notifications.unshift({
     id: `notif-${Date.now()}`,
-    title: 'Withdrawal Successful',
-    body: `₦${price.toLocaleString()} withdrawn to ${resolvedName} (${bank}). WDV Verified.`,
+    title: 'Withdrawal Pending Approval',
+    body: `₦${price.toLocaleString()} withdrawal request to ${resolvedName} (${bank}) is pending review.`,
     date: new Date().toISOString(),
     unread: true
   });
 
+  // Save the withdrawal request permanently in the SQL database withdraw_requests table
+  try {
+    const nowStr = new Date().toISOString();
+    await execute(`
+      INSERT INTO withdraw_requests (
+        id, userId, email, amount, bankName, accountNumber, accountName, status, timestamp, reference, voucherCode, notes, posSlipPath, posSlipUploadedAt, posSlipUploadedBy
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    `, [
+      txId,
+      email,
+      email,
+      price,
+      bank,
+      accountNumber,
+      resolvedName,
+      'pending',
+      nowStr,
+      refNum,
+      voucherCode || '',
+      '',
+      '',
+      '',
+      ''
+    ]);
+  } catch (err) {
+    console.error('[SwiftPay DB] Error saving withdrawal request to SQL table:', err);
+  }
+
   writeDb(refreshedDb);
-  logDiagnostic('INFO', 'Withdrawal complete', { email, amount: price, accountNumber, voucherCode });
+  logDiagnostic('INFO', 'Withdrawal requested and saved to SQL', { email, amount: price, accountNumber, voucherCode });
 
   res.json({
     success: true,
@@ -2188,6 +2186,192 @@ app.post('/api/admin/video/delete', authenticateAdminToken, async (req, res) => 
   } catch (err: any) {
     console.error('Error deleting video guide:', err);
     res.status(500).json({ error: err.message || 'Failed to delete video.' });
+  }
+});
+
+// POS Decline Slip Multer Storage and Middleware Configuration
+const slipStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(process.cwd(), 'uploads', 'slips');
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.png';
+    const cleanName = `slip-${Date.now()}-${Math.floor(Math.random() * 100000)}${ext}`;
+    cb(null, cleanName);
+  }
+});
+
+const uploadPosSlip = multer({
+  storage: slipStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB maximum size
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const mimetypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
+    const validExts = ['.png', '.jpg', '.jpeg', '.pdf'];
+    if (mimetypes.includes(file.mimetype) || validExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PNG, JPG, JPEG, and PDF files are allowed.'));
+    }
+  }
+});
+
+// Admin Withdrawal Management API Endpoints
+// 1. Fetch all withdrawal requests
+app.get('/api/admin/withdrawals', authenticateAdminToken, async (req, res) => {
+  try {
+    const withdrawals = await getAllRows(`SELECT * FROM withdraw_requests ORDER BY timestamp DESC`);
+    res.json({ success: true, withdrawals });
+  } catch (err) {
+    console.error('Error fetching withdrawals:', err);
+    res.status(500).json({ error: 'Failed to fetch withdrawal requests' });
+  }
+});
+
+// 2. Fetch a single withdrawal request's details
+app.get('/api/admin/withdrawals/:transactionId', authenticateAdminToken, async (req, res) => {
+  const { transactionId } = req.params;
+  try {
+    const withdrawal = await getRow(`SELECT * FROM withdraw_requests WHERE id = $1`, [transactionId]);
+    if (!withdrawal) {
+      return res.status(404).json({ error: 'Withdrawal request not found' });
+    }
+    const user = await getRow(`SELECT fullName, phone, balance FROM users WHERE email = $1`, [withdrawal.email || withdrawal.userid || withdrawal.userId]);
+    res.json({
+      success: true,
+      withdrawal: {
+        ...withdrawal,
+        fullName: user?.fullname || user?.fullName || withdrawal.accountName || withdrawal.accountname,
+        phone: user?.phone || '',
+        userBalance: user?.balance || 0
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching withdrawal details:', err);
+    res.status(500).json({ error: 'Failed to fetch withdrawal details' });
+  }
+});
+
+// 3. Update withdrawal status and internal notes
+app.post('/api/admin/withdrawals/:transactionId/status', authenticateAdminToken, async (req, res) => {
+  const { transactionId } = req.params;
+  const { status, notes } = req.body;
+
+  if (!status) {
+    return res.status(400).json({ error: 'Status is required' });
+  }
+
+  try {
+    const withdrawal = await getRow(`SELECT * FROM withdraw_requests WHERE id = $1`, [transactionId]);
+    if (!withdrawal) {
+      return res.status(404).json({ error: 'Withdrawal request not found' });
+    }
+
+    if (notes !== undefined) {
+      await execute(`UPDATE withdraw_requests SET status = $1, notes = $2 WHERE id = $3`, [status, notes, transactionId]);
+    } else {
+      await execute(`UPDATE withdraw_requests SET status = $1 WHERE id = $2`, [status, transactionId]);
+    }
+
+    // Handle real-time notifications, transaction status updates and balance refunding
+    const db = readDb();
+    const userEmail = (withdrawal.email || withdrawal.userid || withdrawal.userId || '').toLowerCase();
+    const userIndex = db.users.findIndex(u => u.email.toLowerCase() === userEmail);
+
+    if (userIndex !== -1) {
+      const user = db.users[userIndex];
+      user.transactions = user.transactions || [];
+      const tx = user.transactions.find((t: any) => t.id === transactionId);
+      if (tx) {
+        tx.status = status === 'completed' ? 'success' : (status === 'rejected' ? 'failed' : status);
+      }
+
+      // Automatically refund balance if transaction is cancelled or rejected and was previously pending/processing
+      const isRefunding = (status === 'rejected' || status === 'cancelled' || status === 'Rejected' || status === 'Cancelled') && 
+                          (withdrawal.status !== 'rejected' && withdrawal.status !== 'cancelled' && withdrawal.status !== 'completed' && withdrawal.status !== 'Rejected' && withdrawal.status !== 'Cancelled' && withdrawal.status !== 'Completed');
+      if (isRefunding) {
+        user.balance += Number(withdrawal.amount);
+        if (tx) {
+          tx.balanceAfter = user.balance;
+        }
+      }
+
+      // Push real-time notification in user's SwiftPay account
+      const msgText = status === 'processing' || status === 'Processing'
+        ? "Your withdrawal is now being processed."
+        : (status === 'completed' || status === 'Completed'
+          ? "Your withdrawal has been completed."
+          : (status === 'rejected' || status === 'Rejected'
+            ? "Your withdrawal has been rejected."
+            : (status === 'cancelled' || status === 'Cancelled'
+              ? "Your withdrawal has been cancelled."
+              : `Your withdrawal status has been updated to ${status}.`)));
+
+      user.notifications = user.notifications || [];
+      user.notifications.unshift({
+        id: `notif-${Date.now()}`,
+        title: `Withdrawal ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        body: msgText,
+        date: new Date().toISOString(),
+        unread: true
+      });
+
+      writeDb(db);
+    }
+
+    logDiagnostic('INFO', `Admin ${(req as any).adminEmail} updated withdrawal ${transactionId} status to ${status}`, { notes });
+    res.json({ success: true, message: 'Status updated successfully' });
+  } catch (err) {
+    console.error('Error updating withdrawal status:', err);
+    res.status(500).json({ error: 'Failed to update withdrawal status' });
+  }
+});
+
+// 4. Update withdrawal internal notes only
+app.post('/api/admin/withdrawals/:transactionId/notes', authenticateAdminToken, async (req, res) => {
+  const { transactionId } = req.params;
+  const { notes } = req.body;
+  try {
+    await execute(`UPDATE withdraw_requests SET notes = $1 WHERE id = $2`, [notes || '', transactionId]);
+    res.json({ success: true, message: 'Notes updated successfully' });
+  } catch (err) {
+    console.error('Error saving admin notes:', err);
+    res.status(500).json({ error: 'Failed to save admin notes' });
+  }
+});
+
+// 5. Upload POS decline slip
+app.post('/api/admin/withdrawals/:transactionId/upload-slip', authenticateAdminToken, uploadPosSlip.single('slip'), async (req, res) => {
+  const { transactionId } = req.params;
+  if (!req.file) {
+    return res.status(400).json({ error: 'Please upload a POS decline slip file' });
+  }
+
+  const filePath = `/uploads/slips/${req.file.filename}`;
+  const nowStr = new Date().toISOString();
+  const adminEmail = (req as any).adminEmail;
+
+  try {
+    await execute(`
+      UPDATE withdraw_requests 
+      SET posSlipPath = $1, posSlipUploadedAt = $2, posSlipUploadedBy = $3
+      WHERE id = $4
+    `, [filePath, nowStr, adminEmail, transactionId]);
+
+    logDiagnostic('INFO', `Admin ${adminEmail} uploaded POS slip for ${transactionId}`, { filePath });
+    res.json({
+      success: true,
+      filePath,
+      uploadedAt: nowStr,
+      uploadedBy: adminEmail
+    });
+  } catch (err) {
+    console.error('Error saving POS slip:', err);
+    res.status(500).json({ error: 'Failed to upload POS decline slip' });
   }
 });
 

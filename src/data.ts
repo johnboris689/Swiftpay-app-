@@ -141,8 +141,7 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     amount: 10000,
     date: '2026-07-08T18:45:00Z',
     status: 'success',
-    description: 'WDV Voucher Purchase',
-    wdvCodeGenerated: 'WDV-8960-7232-9501'
+    description: 'WDV Voucher Purchase'
   },
   {
     id: 'tx-3',
@@ -150,8 +149,7 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     amount: 2500,
     date: '2026-07-08T19:02:00Z',
     status: 'success',
-    description: 'Airtime Recharge (MTN 08034567890)',
-    wdvCodeUsed: 'WDV-8960-7232-9501'
+    description: 'Airtime Recharge (MTN 08034567890)'
   },
   {
     id: 'tx-4',

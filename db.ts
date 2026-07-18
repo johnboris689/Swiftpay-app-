@@ -28,6 +28,7 @@ interface JsonData {
   admin_settings: Record<string, string>;
   logs: any[];
   admins: any[];
+  withdraw_requests: any[];
 }
 
 // -------------------- JSON DATABASE ENGINE FALLBACK --------------------
@@ -97,10 +98,7 @@ function getJsonDb(): JsonData {
           transactions: '[]'
         }
       ],
-      vouchers: [
-        { code: 'WDV-7674-2206-6501', amount: 6500, status: 'unused', usedby: '', usedat: '' },
-        { code: 'WDV-9001-3029-8675', amount: 6500, status: 'unused', usedby: '', usedat: '' }
-      ],
+      vouchers: [],
       password_resets: [],
       admin_settings: defaultSettings,
       logs: [],
@@ -109,7 +107,8 @@ function getJsonDb(): JsonData {
           email: 'talkdavidjohn@gmail.com',
           passwordhash: secureAdminPasswordHash
         }
-      ]
+      ],
+      withdraw_requests: []
     };
     fs.writeFileSync(JSON_FILE, JSON.stringify(initial, null, 2));
     return initial;
@@ -172,6 +171,23 @@ function getJsonDb(): JsonData {
       admins: (parsed.admins || []).map((a: any) => ({
         email: (a.email || '').toLowerCase(),
         passwordhash: a.passwordHash || a.passwordhash || ''
+      })),
+      withdraw_requests: (parsed.withdraw_requests || parsed.withdrawRequests || []).map((w: any) => ({
+        id: w.id || '',
+        userId: w.userId || w.userid || '',
+        email: w.email || '',
+        phone: w.phone || '',
+        amount: Number(w.amount || 0),
+        bankName: w.bankName || w.bankname || '',
+        accountNumber: w.accountNumber || w.accountnumber || '',
+        accountName: w.accountName || w.accountname || '',
+        reference: w.reference || '',
+        status: w.status || 'Pending',
+        timestamp: w.timestamp || w.created_at || new Date().toISOString(),
+        created_at: w.created_at || w.timestamp || new Date().toISOString(),
+        adminNotes: w.adminNotes || w.adminnotes || '',
+        posSlipPath: w.posSlipPath || w.posslippath || '',
+        posSlipUploadedAt: w.posSlipUploadedAt || w.posslipuploadedat || ''
       }))
     };
 
@@ -217,7 +233,8 @@ function getJsonDb(): JsonData {
       password_resets: [],
       admin_settings: {},
       logs: [],
-      admins: []
+      admins: [],
+      withdraw_requests: []
     };
   }
 }
@@ -385,11 +402,19 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS withdraw_requests (
       id TEXT PRIMARY KEY,
       userId TEXT,
+      email TEXT,
       amount REAL,
       bankName TEXT,
       accountNumber TEXT,
+      accountName TEXT,
       status TEXT,
-      timestamp TEXT
+      timestamp TEXT,
+      reference TEXT,
+      voucherCode TEXT,
+      notes TEXT,
+      posSlipPath TEXT,
+      posSlipUploadedAt TEXT,
+      posSlipUploadedBy TEXT
     )
   `);
 
@@ -429,6 +454,31 @@ export async function initDb() {
   `);
 
   // Run ALTER TABLE migrations for existing databases
+  try {
+    await execute(`ALTER TABLE withdraw_requests ADD COLUMN email TEXT`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE withdraw_requests ADD COLUMN accountName TEXT`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE withdraw_requests ADD COLUMN reference TEXT`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE withdraw_requests ADD COLUMN voucherCode TEXT`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE withdraw_requests ADD COLUMN notes TEXT`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE withdraw_requests ADD COLUMN posSlipPath TEXT`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE withdraw_requests ADD COLUMN posSlipUploadedAt TEXT`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE withdraw_requests ADD COLUMN posSlipUploadedBy TEXT`);
+  } catch (e) {}
+
   try {
     await execute(`ALTER TABLE users ADD COLUMN wdvVerified INTEGER DEFAULT 0`);
   } catch (e) {
@@ -533,18 +583,7 @@ export async function initDb() {
     console.log('[SwiftPay DB] Default user seeded.');
   }
 
-  // Seed vouchers if empty
-  const voucherCount = await getRow(`SELECT COUNT(*) as count FROM vouchers`);
-  if (!voucherCount || Number(voucherCount.count || 0) === 0) {
-    const defaultVouchers = [
-      { code: 'WDV-7674-2206-6501', amount: 6500 },
-      { code: 'WDV-9001-3029-8675', amount: 6500 }
-    ];
-    for (const v of defaultVouchers) {
-      await execute(`INSERT INTO vouchers (code, amount, status) VALUES ($1, $2, $3)`, [v.code, v.amount, 'unused']);
-    }
-    console.log('[SwiftPay DB] Default WDV vouchers seeded.');
-  }
+  // Seed vouchers if empty (no hardcoded vouchers should be seeded)
 
   // Seed default admin settings if not present
   const settingsCount = await getRow(`SELECT COUNT(*) as count FROM admin_settings`);
@@ -660,6 +699,53 @@ export function execute(sql: string, params: any[] = []): Promise<any> {
           };
           db.vouchers = db.vouchers.filter(x => x.code !== v.code);
           db.vouchers.push(v);
+        } else if (sqlUpper.includes('INSERT INTO WITHDRAW_REQUESTS')) {
+          const w = {
+            id: params[0],
+            userid: params[1],
+            email: params[2],
+            amount: Number(params[3] ?? 0),
+            bankname: params[4],
+            accountnumber: params[5],
+            accountname: params[6],
+            status: params[7] || 'pending',
+            timestamp: params[8] || new Date().toISOString(),
+            reference: params[9],
+            vouchercode: params[10] || '',
+            notes: params[11] || '',
+            posSlippath: params[12] || '',
+            posSlipuploadedAt: params[13] || '',
+            posSlipuploadedBy: params[14] || ''
+          };
+          db.withdraw_requests = db.withdraw_requests || [];
+          db.withdraw_requests = db.withdraw_requests.filter((x: any) => x.id !== w.id);
+          db.withdraw_requests.push(w);
+        } else if (sqlUpper.includes('UPDATE WITHDRAW_REQUESTS')) {
+          db.withdraw_requests = db.withdraw_requests || [];
+          const idParam = params.find(p => typeof p === 'string' && p.startsWith('tx-'));
+          if (idParam) {
+            const req = db.withdraw_requests.find((x: any) => x.id === idParam);
+            if (req) {
+              if (sqlUpper.includes('STATUS =') || sqlUpper.includes('STATUS=')) {
+                if (sqlUpper.includes('STATUS =') && sqlUpper.includes('NOTES =')) {
+                  req.status = params[0];
+                  req.notes = params[1];
+                } else {
+                  req.status = params[0];
+                }
+              }
+              if (sqlUpper.includes('NOTES =') || sqlUpper.includes('NOTES=')) {
+                if (!sqlUpper.includes('STATUS =')) {
+                  req.notes = params[0];
+                }
+              }
+              if (sqlUpper.includes('POSSLIPPATH =') || sqlUpper.includes('POSSLIPPATH=')) {
+                req.posSlippath = params[0];
+                req.posSlipuploadedAt = params[1];
+                req.posSlipuploadedBy = params[2];
+              }
+            }
+          }
         } else if (sqlUpper.includes('INSERT INTO PASSWORD_RESETS')) {
           const r = {
             id: params[0],
@@ -734,6 +820,12 @@ export function getRow(sql: string, params: any[] = []): Promise<any> {
           const row = db.vouchers.find(v => v.code === code);
           return resolve(row || null);
         }
+        if (sqlUpper.includes('FROM WITHDRAW_REQUESTS WHERE ID')) {
+          db.withdraw_requests = db.withdraw_requests || [];
+          const idVal = params[0];
+          const row = db.withdraw_requests.find((w: any) => w.id === idVal);
+          return resolve(row || null);
+        }
         
         resolve(null);
       } catch (err) {
@@ -773,6 +865,10 @@ export function getAllRows(sql: string, params: any[] = []): Promise<any[]> {
         }
         if (sqlUpper.includes('FROM LOGS')) {
           return resolve(db.logs);
+        }
+        if (sqlUpper.includes('FROM WITHDRAW_REQUESTS')) {
+          db.withdraw_requests = db.withdraw_requests || [];
+          return resolve(db.withdraw_requests);
         }
 
         resolve([]);

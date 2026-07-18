@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Users, Coins, ShoppingBag, ShieldAlert, ArrowLeft, Search, UserMinus, ToggleLeft, ToggleRight, Trash2, Edit2, Key, RefreshCw, Send, FileSpreadsheet, BarChart3, Database, MessageSquare, AlertCircle, Video, Settings } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Users, Coins, ShoppingBag, ShieldAlert, ArrowLeft, Search, UserMinus, ToggleLeft, ToggleRight, Trash2, Edit2, Key, RefreshCw, Send, FileSpreadsheet, BarChart3, Database, MessageSquare, AlertCircle, Video, Settings, DollarSign, CheckCircle, UploadCloud, Clock, ArrowUpRight, FileText, XCircle, AlertTriangle, Inbox } from 'lucide-react';
 import GlassCard from './GlassCard';
 
 interface AdminPanelProps {
@@ -9,6 +9,8 @@ interface AdminPanelProps {
   onToast: (msg: string, type: 'success' | 'info' | 'error') => void;
   onAddGlobalNotification: (title: string, body: string, type: string) => void;
   onSendSimulatedEmail: (to: string, subject: string, body: string) => void;
+  adminPath?: string;
+  navigateTo?: (path: string) => void;
 }
 
 export default function AdminPanel({
@@ -17,9 +19,26 @@ export default function AdminPanel({
   onBack,
   onToast,
   onAddGlobalNotification,
-  onSendSimulatedEmail
+  onSendSimulatedEmail,
+  adminPath,
+  navigateTo
 }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'voucher_generator'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'voucher_generator' | 'withdrawals'>('overview');
+  
+  // Withdrawal Management System State
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [loadingWithdrawals, setLoadingWithdrawals] = useState(false);
+  const [withdrawalSearch, setWithdrawalSearch] = useState('');
+  const [withdrawalStatusFilter, setWithdrawalStatusFilter] = useState<'all' | 'pending' | 'processing' | 'completed' | 'rejected'>('all');
+  const [withdrawalPage, setWithdrawalPage] = useState(1);
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState<any | null>(null);
+  const [loadingSelectedWithdrawal, setLoadingSelectedWithdrawal] = useState(false);
+  const [adminNotes, setAdminNotes] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [uploadingSlip, setUploadingSlip] = useState(false);
+  const [isDraggingSlip, setIsDraggingSlip] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -301,7 +320,161 @@ export default function AdminPanel({
     fetchWdvConfig();
     fetchAdminSettings();
     fetchVouchers();
+    fetchWithdrawals();
   }, []);
+
+  // Fetch all withdrawal requests
+  const fetchWithdrawals = async () => {
+    setLoadingWithdrawals(true);
+    try {
+      const res = await fetch('/api/admin/withdrawals', {
+        headers: getAdminHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWithdrawals(data.withdrawals || []);
+      } else {
+        onToast('Failed to fetch withdrawal database', 'error');
+      }
+    } catch (err) {
+      console.error('Error loading withdrawals:', err);
+    } finally {
+      setLoadingWithdrawals(false);
+    }
+  };
+
+  // Fetch a single withdrawal details
+  const fetchSelectedWithdrawalDetails = async (txId: string) => {
+    setLoadingSelectedWithdrawal(true);
+    try {
+      const res = await fetch(`/api/admin/withdrawals/${txId}`, {
+        headers: getAdminHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedWithdrawal(data.withdrawal);
+        setAdminNotes(data.withdrawal?.notes || '');
+      } else {
+        onToast('Failed to fetch withdrawal request details', 'error');
+      }
+    } catch (err) {
+      console.error('Error loading withdrawal details:', err);
+    } finally {
+      setLoadingSelectedWithdrawal(false);
+    }
+  };
+
+  // Detect and handle SPA Details routing
+  const isDetailsPage = adminPath?.startsWith('/admin/withdrawals/');
+  const selectedTxId = isDetailsPage ? adminPath?.split('/').pop() : null;
+
+  useEffect(() => {
+    if (selectedTxId) {
+      fetchSelectedWithdrawalDetails(selectedTxId);
+      // Poll every 5 seconds for single transaction view live status updates
+      const interval = setInterval(() => {
+        fetchSelectedWithdrawalDetails(selectedTxId);
+      }, 5000);
+      return () => clearInterval(interval);
+    } else {
+      setSelectedWithdrawal(null);
+    }
+  }, [selectedTxId]);
+
+  // General list real-time polling updates when tab is withdrawals
+  useEffect(() => {
+    if (activeTab === 'withdrawals' && !isDetailsPage) {
+      fetchWithdrawals();
+      const interval = setInterval(fetchWithdrawals, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, isDetailsPage]);
+
+  // Update withdrawal status (pending, processing, completed, rejected)
+  const updateWithdrawalStatus = async (status: string) => {
+    if (!selectedWithdrawal) return;
+    try {
+      const res = await fetch(`/api/admin/withdrawals/${selectedWithdrawal.id}/status`, {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ status, notes: adminNotes })
+      });
+      if (res.ok) {
+        onToast(`Withdrawal status updated to ${status}`, 'success');
+        fetchSelectedWithdrawalDetails(selectedWithdrawal.id);
+        fetchWithdrawals();
+      } else {
+        const err = await res.json();
+        onToast(err.error || 'Failed to update withdrawal status', 'error');
+      }
+    } catch (err) {
+      onToast('Network error updating status', 'error');
+    }
+  };
+
+  // Update withdrawal internal notes only
+  const saveInternalNotes = async () => {
+    if (!selectedWithdrawal) return;
+    setSavingNotes(true);
+    try {
+      const res = await fetch(`/api/admin/withdrawals/${selectedWithdrawal.id}/notes`, {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ notes: adminNotes })
+      });
+      if (res.ok) {
+        onToast('Internal notes saved securely', 'success');
+        setSelectedWithdrawal(prev => prev ? { ...prev, notes: adminNotes } : null);
+      } else {
+        onToast('Failed to save notes', 'error');
+      }
+    } catch (err) {
+      onToast('Network error saving notes', 'error');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  // Upload POS decline slip
+  const handleSlipFileUpload = async (file: File) => {
+    if (!selectedWithdrawal) return;
+    if (file.size > 10 * 1024 * 1024) {
+      onToast('File exceeds the 10 MB maximum size limit', 'error');
+      return;
+    }
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!['png', 'jpg', 'jpeg', 'pdf'].includes(ext || '')) {
+      onToast('Only PNG, JPG, JPEG, and PDF files are allowed', 'error');
+      return;
+    }
+
+    setUploadingSlip(true);
+    try {
+      const formData = new FormData();
+      formData.append('slip', file);
+
+      const token = localStorage.getItem('swiftpay_admin_token') || '';
+      const res = await fetch(`/api/admin/withdrawals/${selectedWithdrawal.id}/upload-slip`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (res.ok) {
+        onToast('POS Decline Slip uploaded successfully', 'success');
+        fetchSelectedWithdrawalDetails(selectedWithdrawal.id);
+      } else {
+        const err = await res.json();
+        onToast(err.error || 'Failed to upload POS slip', 'error');
+      }
+    } catch (err) {
+      onToast('Network error uploading slip', 'error');
+    } finally {
+      setUploadingSlip(false);
+    }
+  };
 
   const fetchVouchers = async () => {
     setLoadingVouchers(true);
@@ -612,6 +785,403 @@ export default function AdminPanel({
     onToast('Transactions database exported as CSV!', 'success');
   };
 
+  // Mask helper for account numbers
+  const maskAccountNumber = (num: string) => {
+    if (!num) return '';
+    if (num.length <= 4) return num;
+    return num.slice(0, 3) + '*'.repeat(num.length - 6) + num.slice(-3);
+  };
+
+  // Calculate live stats from the database (Section 8)
+  const stats = React.useMemo(() => {
+    let total = withdrawals.length;
+    let pendingCount = 0;
+    let processingCount = 0;
+    let completedCount = 0;
+    let rejectedCount = 0;
+    
+    let amountToday = 0;
+    let amountWeek = 0;
+    let amountMonth = 0;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    
+    // Get start of week
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0,0,0,0);
+    const weekStartTime = weekStart.getTime();
+
+    // Get start of month
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    for (const w of withdrawals) {
+      const amt = Number(w.amount || 0);
+      const statusLower = (w.status || '').toLowerCase();
+      
+      if (statusLower === 'pending') pendingCount++;
+      else if (statusLower === 'processing') processingCount++;
+      else if (statusLower === 'completed' || statusLower === 'success') completedCount++;
+      else if (statusLower === 'rejected' || statusLower === 'failed' || statusLower === 'cancelled') rejectedCount++;
+
+      const rawDate = w.timestamp || w.created_at;
+      const parsedDate = rawDate ? new Date(rawDate) : null;
+      const wTime = parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.getTime() : 0;
+      
+      if (statusLower === 'completed' || statusLower === 'success') {
+        if (wTime >= todayStart) amountToday += amt;
+        if (wTime >= weekStartTime) amountWeek += amt;
+        if (wTime >= monthStart) amountMonth += amt;
+      }
+    }
+
+    return {
+      total,
+      pendingCount,
+      processingCount,
+      completedCount,
+      rejectedCount,
+      amountToday,
+      amountWeek,
+      amountMonth
+    };
+  }, [withdrawals]);
+
+  // Search and status filters for withdrawal request console (Section 1)
+  const filteredWithdrawals = React.useMemo(() => {
+    return withdrawals.filter(w => {
+      const term = withdrawalSearch.toLowerCase().trim();
+      const matchSearch = !term || 
+        (w.accountName || w.accountname || '').toLowerCase().includes(term) ||
+        (w.email || w.userId || '').toLowerCase().includes(term) ||
+        (w.reference || w.id || '').toLowerCase().includes(term) ||
+        (w.bankName || w.bankname || '').toLowerCase().includes(term) ||
+        (w.accountNumber || w.accountnumber || '').toLowerCase().includes(term);
+
+      const statusLower = (w.status || '').toLowerCase();
+      let matchStatus = true;
+      if (withdrawalStatusFilter !== 'all') {
+        if (withdrawalStatusFilter === 'rejected') {
+          matchStatus = statusLower === 'rejected' || statusLower === 'failed' || statusLower === 'cancelled';
+        } else {
+          matchStatus = statusLower === withdrawalStatusFilter;
+        }
+      }
+
+      return matchSearch && matchStatus;
+    });
+  }, [withdrawals, withdrawalSearch, withdrawalStatusFilter]);
+
+  const itemsPerPage = 8;
+  const totalWithdrawalPages = Math.ceil(filteredWithdrawals.length / itemsPerPage) || 1;
+  const paginatedWithdrawals = React.useMemo(() => {
+    const startIndex = (withdrawalPage - 1) * itemsPerPage;
+    return filteredWithdrawals.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredWithdrawals, withdrawalPage]);
+
+  // Conditionally Render Full-Screen Withdrawal Details Page (Do NOT use popup or modal)
+  if (isDetailsPage) {
+    if (loadingSelectedWithdrawal && !selectedWithdrawal) {
+      return (
+        <div className="p-8 text-center space-y-4 flex flex-col items-center justify-center min-h-[400px]">
+          <RefreshCw className="h-8 w-8 text-teal-400 animate-spin" />
+          <p className="text-xs text-slate-400 font-mono tracking-widest">LOADING WITHDRAWAL SECURITY AUDIT DATABASES...</p>
+        </div>
+      );
+    }
+
+    if (!selectedWithdrawal) {
+      return (
+        <div className="p-8 text-center space-y-4">
+          <AlertCircle className="h-12 w-12 text-rose-500 mx-auto" />
+          <h3 className="text-lg font-bold text-white">Withdrawal request not found</h3>
+          <p className="text-xs text-slate-400">The request may have been deleted or the transaction ID is invalid.</p>
+          <button
+            onClick={() => {
+              setActiveTab('withdrawals');
+              navigateTo && navigateTo('/admin');
+            }}
+            className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-xs hover:bg-white/10 transition-all cursor-pointer"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      );
+    }
+
+    const statusLower = (selectedWithdrawal.status || '').toLowerCase();
+    let statusBg = 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400';
+    let statusLabel = '🟡 Transaction Pending';
+    let statusDesc = 'This withdrawal request is currently pending admin review.';
+
+    if (statusLower === 'processing') {
+      statusBg = 'bg-blue-500/10 border-blue-500/30 text-blue-400';
+      statusLabel = '🔵 Transaction Processing';
+      statusDesc = 'This withdrawal request is currently being processed.';
+    } else if (statusLower === 'completed' || statusLower === 'success') {
+      statusBg = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
+      statusLabel = '🟢 Transaction Completed';
+      statusDesc = 'This withdrawal has been successfully dispatched and completed.';
+    } else if (statusLower === 'rejected' || statusLower === 'failed') {
+      statusBg = 'bg-rose-500/10 border-rose-500/30 text-rose-400';
+      statusLabel = '🔴 Transaction Rejected';
+      statusDesc = 'This withdrawal request was rejected and the user has been refunded.';
+    } else if (statusLower === 'cancelled') {
+      statusBg = 'bg-slate-500/10 border-slate-500/30 text-slate-400';
+      statusLabel = '⚪ Transaction Cancelled';
+      statusDesc = 'This withdrawal request was cancelled and the user has been refunded.';
+    }
+
+    return (
+      <div className="p-5 space-y-6 h-full overflow-y-auto no-scrollbar animate-[fadeIn_0.2s_ease-out]">
+        {/* Navigation Header */}
+        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+          <button
+            onClick={() => {
+              setActiveTab('withdrawals');
+              navigateTo && navigateTo('/admin');
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-slate-300 hover:text-white text-xs font-bold cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Withdrawals
+          </button>
+          <div className="text-right">
+            <span className="text-[10px] text-slate-500 font-mono block">TRANSACTION REF</span>
+            <span className="text-xs font-bold text-teal-400 font-mono">{selectedWithdrawal.reference || selectedWithdrawal.id}</span>
+          </div>
+        </div>
+
+        {/* 1. Large Status Card */}
+        <div className={`p-6 rounded-2xl border ${statusBg} flex flex-col md:flex-row items-center justify-between gap-4 animate-[fadeIn_0.2s_ease-out]`}>
+          <div className="space-y-1 text-center md:text-left">
+            <h2 className="text-lg font-black tracking-tight">{statusLabel}</h2>
+            <p className="text-xs opacity-80">{statusDesc}</p>
+          </div>
+          <div className="text-2xl font-mono font-black shrink-0">
+            ₦{Number(selectedWithdrawal.amount || 0).toLocaleString()}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Account Details and Actions */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* 2. Account Details Section */}
+            <GlassCard className="p-6 space-y-4">
+              <h3 className="text-sm font-black text-white uppercase tracking-wider border-b border-white/5 pb-2">
+                Account Details Section
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">USER FULL NAME:</span>
+                  <span className="font-bold text-white text-sm">{selectedWithdrawal.fullName || selectedWithdrawal.accountName || selectedWithdrawal.accountname}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">EMAIL ADDRESS:</span>
+                  <span className="font-bold text-white">{selectedWithdrawal.email || selectedWithdrawal.userId}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">PHONE NUMBER:</span>
+                  <span className="font-bold text-white font-mono">{selectedWithdrawal.phone || 'N/A'}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">WITHDRAWAL AMOUNT:</span>
+                  <span className="font-bold text-emerald-400 font-mono text-sm">₦{Number(selectedWithdrawal.amount || 0).toLocaleString()}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">BANK NAME:</span>
+                  <span className="font-bold text-white">{selectedWithdrawal.bankName || selectedWithdrawal.bankname || 'N/A'}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">ACCOUNT NUMBER (MASKED):</span>
+                  <span className="font-bold text-white font-mono">{maskAccountNumber(selectedWithdrawal.accountNumber || selectedWithdrawal.accountnumber)}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">ACCOUNT NAME:</span>
+                  <span className="font-bold text-white">{selectedWithdrawal.accountName || selectedWithdrawal.accountname || 'N/A'}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">REFERENCE NUMBER:</span>
+                  <span className="font-bold text-teal-400 font-mono">{selectedWithdrawal.reference}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">REQUEST DATE &amp; TIME:</span>
+                  <span className="font-bold text-white font-mono">{new Date(selectedWithdrawal.timestamp || selectedWithdrawal.created_at).toLocaleString()}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-mono text-[10px]">WDV VOUCHER CODE:</span>
+                  <span className="font-bold text-indigo-400 font-mono">{selectedWithdrawal.voucherCode || selectedWithdrawal.vouchercode || 'None'}</span>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* 3. Action Buttons Section */}
+            <GlassCard className="p-6 space-y-4">
+              <h3 className="text-sm font-black text-white uppercase tracking-wider border-b border-white/5 pb-2">
+                Admin Action Controls
+              </h3>
+              <p className="text-[10px] text-slate-400">
+                Manage this withdrawal. Status updates are applied immediately, notifying the user inside their account.
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <button
+                  onClick={() => updateWithdrawalStatus('processing')}
+                  disabled={statusLower === 'completed' || statusLower === 'rejected' || statusLower === 'cancelled' || statusLower === 'success'}
+                  className="px-3 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 disabled:opacity-40 text-blue-400 text-xs font-bold transition-all cursor-pointer text-center"
+                >
+                  Mark as Processing
+                </button>
+                <button
+                  onClick={() => updateWithdrawalStatus('completed')}
+                  disabled={statusLower === 'completed' || statusLower === 'rejected' || statusLower === 'cancelled' || statusLower === 'success'}
+                  className="px-3 py-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-40 text-emerald-400 text-xs font-bold transition-all cursor-pointer text-center"
+                >
+                  Mark as Completed
+                </button>
+                <button
+                  onClick={() => updateWithdrawalStatus('rejected')}
+                  disabled={statusLower === 'completed' || statusLower === 'rejected' || statusLower === 'cancelled' || statusLower === 'success'}
+                  className="px-3 py-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 disabled:opacity-40 text-rose-400 text-xs font-bold transition-all cursor-pointer text-center"
+                >
+                  Reject Withdrawal
+                </button>
+                <button
+                  onClick={() => updateWithdrawalStatus('cancelled')}
+                  disabled={statusLower === 'completed' || statusLower === 'rejected' || statusLower === 'cancelled' || statusLower === 'success'}
+                  className="px-3 py-2.5 rounded-xl border border-slate-500/30 bg-slate-500/10 hover:bg-slate-500/20 disabled:opacity-40 text-slate-300 text-xs font-bold transition-all cursor-pointer text-center"
+                >
+                  Cancel Withdrawal
+                </button>
+              </div>
+            </GlassCard>
+          </div>
+
+          {/* POS Slip and Notes columns */}
+          <div className="space-y-6">
+            {/* 4. POS Decline Slip Requirement Section */}
+            <GlassCard className="p-6 space-y-4">
+              <h3 className="text-xs font-black text-white uppercase tracking-wider border-b border-white/5 pb-2">
+                Requirement: POS Decline Slip Terminal
+              </h3>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Upload the POS decline slip for this withdrawal.
+              </p>
+
+              {/* Drag and Drop Zone */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDraggingSlip(true);
+                }}
+                onDragLeave={() => setIsDraggingSlip(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingSlip(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleSlipFileUpload(e.dataTransfer.files[0]);
+                  }
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+                  isDraggingSlip
+                    ? 'border-teal-500 bg-teal-500/5'
+                    : 'border-white/10 hover:border-teal-500/40 bg-white/5'
+                }`}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleSlipFileUpload(e.target.files[0]);
+                    }
+                  }}
+                  className="hidden"
+                  accept=".png,.jpg,.jpeg,.pdf"
+                />
+                {uploadingSlip ? (
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <RefreshCw className="h-6 w-6 text-teal-400 animate-spin" />
+                    <span className="text-[10px] text-slate-400 font-mono">UPLOADING...</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <UploadCloud className="h-7 w-7 text-teal-400" />
+                    <span className="text-[11px] text-slate-300 font-bold block">Drag &amp; Drop or Click</span>
+                    <span className="text-[9px] text-slate-500 font-mono block">PNG, JPG, JPEG, PDF (Max 10MB)</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Uploaded POS Slip View */}
+              {(selectedWithdrawal.posSlipPath || selectedWithdrawal.posslippath) && (
+                <div className="p-3.5 rounded-xl bg-slate-900/40 border border-white/5 space-y-2">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                    <span>POS SLIP ATTACHED:</span>
+                    <span className="text-emerald-400 font-bold">ONLINE</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-teal-400" />
+                    <div className="truncate flex-1">
+                      <span className="block text-xs font-bold text-white truncate">
+                        {(selectedWithdrawal.posSlipPath || selectedWithdrawal.posslippath).split('/').pop()}
+                      </span>
+                      <span className="block text-[9px] text-slate-500">
+                        Uploaded: {new Date(selectedWithdrawal.posSlipUploadedAt || selectedWithdrawal.posslipuploadedat || Date.now()).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                  <a
+                    href={selectedWithdrawal.posSlipPath || selectedWithdrawal.posslippath}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block text-center text-[10px] font-bold text-teal-400 bg-teal-500/10 border border-teal-500/20 py-2 rounded-lg hover:bg-teal-500/20 transition-all cursor-pointer"
+                  >
+                    View / Download POS Slip
+                  </a>
+                </div>
+              )}
+            </GlassCard>
+
+            {/* 5. Admin Notes Section */}
+            <GlassCard className="p-6 space-y-4">
+              <h3 className="text-xs font-black text-white uppercase tracking-wider border-b border-white/5 pb-2">
+                Internal Admin Notes
+              </h3>
+              <p className="text-[10px] text-slate-400">
+                Write private annotations for other administrators regarding this transaction.
+              </p>
+              <textarea
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                className="w-full h-32 bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-teal-500/50 resize-none font-sans"
+                placeholder="Insert audit notes, POS terminals logs, client compliance flags..."
+              />
+              <button
+                onClick={saveInternalNotes}
+                disabled={savingNotes}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-indigo-500 hover:from-teal-600 hover:to-indigo-600 text-slate-950 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+              >
+                {savingNotes ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    Saving Notes...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-3.5 w-3.5" />
+                    Save Internal Notes
+                  </>
+                )}
+              </button>
+            </GlassCard>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-5 space-y-6 h-full overflow-y-auto no-scrollbar animate-[fadeIn_0.2s_ease-out]">
       {/* Header */}
@@ -669,6 +1239,18 @@ export default function AdminPanel({
           >
             <Key className="h-4 w-4 text-teal-400" />
             WDV Voucher Generator
+          </button>
+
+          <button
+            onClick={() => setActiveTab('withdrawals')}
+            className={`w-full text-left px-3.5 py-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2.5 transition-all cursor-pointer ${
+              activeTab === 'withdrawals'
+                ? 'bg-gradient-to-r from-teal-500/10 to-indigo-500/10 border border-teal-500/20 text-teal-400 shadow-[0_4px_25px_rgba(20,184,166,0.06)]'
+                : 'border border-transparent hover:bg-white/5 text-slate-400 hover:text-white'
+            }`}
+          >
+            <DollarSign className="h-4 w-4 text-teal-400" />
+            Withdrawals
           </button>
 
           <div className="pt-4 border-t border-white/5 mt-4">
@@ -1284,6 +1866,276 @@ export default function AdminPanel({
                     </tbody>
                   </table>
                 </div>
+              </GlassCard>
+            </div>
+          )}
+
+          {activeTab === 'withdrawals' && (
+            <div className="space-y-6 animate-[fadeIn_0.2s_ease-out]">
+              {/* Introduction Header card */}
+              <GlassCard className="p-5 border-white/5 bg-gradient-to-br from-indigo-950/10 via-slate-900/10 to-teal-950/5">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-black uppercase tracking-wider text-teal-400 flex items-center gap-2">
+                      <DollarSign className="h-5 w-5 text-teal-400" />
+                      Live Withdrawal Management Console
+                    </h4>
+                    <p className="text-[10px] text-slate-400 max-w-xl">
+                      Monitor, audit, and dispatch secure real-time withdrawal requests. Status modifications are saved instantly to the SQL database.
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={fetchWithdrawals}
+                    disabled={loadingWithdrawals}
+                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-teal-400 border border-white/10 cursor-pointer flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase shrink-0 transition-all"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${loadingWithdrawals ? 'animate-spin' : ''}`} />
+                    Sync Logs
+                  </button>
+                </div>
+              </GlassCard>
+
+              {/* Live Statistics Cards (Section 8) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <GlassCard className="p-3 bg-[#1e1b4b]/10 border-white/5 flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400">
+                    <DollarSign className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-slate-400 block uppercase">Total Requests</span>
+                    <span className="text-sm font-bold text-white font-mono">{stats.total}</span>
+                  </div>
+                </GlassCard>
+
+                <GlassCard className="p-3 bg-[#1e1b4b]/10 border-white/5 flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-yellow-500/10 text-yellow-400">
+                    <Clock className="h-4 w-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-slate-400 block uppercase">Pending Requests</span>
+                    <span className="text-sm font-bold text-yellow-400 font-mono">{stats.pendingCount}</span>
+                  </div>
+                </GlassCard>
+
+                <GlassCard className="p-3 bg-[#1e1b4b]/10 border-white/5 flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
+                    <RefreshCw className="h-4 w-4 animate-spin" style={{ animationDuration: '3s' }} />
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-slate-400 block uppercase">Processing</span>
+                    <span className="text-sm font-bold text-blue-400 font-mono">{stats.processingCount}</span>
+                  </div>
+                </GlassCard>
+
+                <GlassCard className="p-3 bg-[#1e1b4b]/10 border-white/5 flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
+                    <CheckCircle className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-slate-400 block uppercase">Completed</span>
+                    <span className="text-sm font-bold text-emerald-400 font-mono">{stats.completedCount}</span>
+                  </div>
+                </GlassCard>
+
+                <GlassCard className="p-3 bg-[#1e1b4b]/10 border-white/5 flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400">
+                    <XCircle className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-slate-400 block uppercase">Rejected / Cancelled</span>
+                    <span className="text-sm font-bold text-rose-400 font-mono">{stats.rejectedCount}</span>
+                  </div>
+                </GlassCard>
+
+                <GlassCard className="p-3 bg-[#1e1b4b]/10 border-white/5 flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
+                    <ArrowUpRight className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-slate-400 block uppercase">Withdrawn Today</span>
+                    <span className="text-xs font-bold text-white font-mono">₦{stats.amountToday.toLocaleString()}</span>
+                  </div>
+                </GlassCard>
+
+                <GlassCard className="p-3 bg-[#1e1b4b]/10 border-white/5 flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400">
+                    <ArrowUpRight className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-slate-400 block uppercase">Withdrawn This Week</span>
+                    <span className="text-xs font-bold text-white font-mono">₦{stats.amountWeek.toLocaleString()}</span>
+                  </div>
+                </GlassCard>
+
+                <GlassCard className="p-3 bg-[#1e1b4b]/10 border-white/5 flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400">
+                    <ArrowUpRight className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-slate-400 block uppercase">Withdrawn This Month</span>
+                    <span className="text-xs font-bold text-white font-mono">₦{stats.amountMonth.toLocaleString()}</span>
+                  </div>
+                </GlassCard>
+              </div>
+
+              {/* Filtering and Search Controls (Section 1) */}
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-slate-950/30 p-4 border border-white/5 rounded-2xl">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                  <input
+                    type="text"
+                    value={withdrawalSearch}
+                    onChange={(e) => {
+                      setWithdrawalSearch(e.target.value);
+                      setWithdrawalPage(1);
+                    }}
+                    placeholder="Search by name, email, transaction reference, bank, account number..."
+                    className="w-full text-xs bg-slate-950 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider shrink-0">Filter Status:</span>
+                  <select
+                    value={withdrawalStatusFilter}
+                    onChange={(e) => {
+                      setWithdrawalStatusFilter(e.target.value as any);
+                      setWithdrawalPage(1);
+                    }}
+                    className="bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+                  >
+                    <option value="all">All Transactions</option>
+                    <option value="pending">🟡 Pending Only</option>
+                    <option value="processing">🔵 Processing Only</option>
+                    <option value="completed">🟢 Completed Only</option>
+                    <option value="rejected">🔴 Rejected &amp; Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Withdrawals List Datagrid table */}
+              <GlassCard className="p-0 border-white/5 overflow-hidden">
+                <div className="overflow-x-auto no-scrollbar">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/5 bg-slate-950/40 text-[9px] font-mono uppercase text-slate-400 tracking-wider">
+                        <th className="py-3 px-4 font-bold">User Details</th>
+                        <th className="py-3 px-4 font-bold">Amount</th>
+                        <th className="py-3 px-4 font-bold">Bank Name</th>
+                        <th className="py-3 px-4 font-bold">Account Number</th>
+                        <th className="py-3 px-4 font-bold">Date &amp; Time</th>
+                        <th className="py-3 px-4 font-bold">Reference</th>
+                        <th className="py-3 px-4 font-bold">Status</th>
+                        <th className="py-3 px-4 font-bold text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.03] text-xs">
+                      {loadingWithdrawals && paginatedWithdrawals.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-slate-400 font-mono animate-pulse">
+                            Loading withdrawal security database...
+                          </td>
+                        </tr>
+                      ) : paginatedWithdrawals.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-slate-400 font-mono">
+                            <div className="flex flex-col items-center justify-center space-y-2">
+                              <Inbox className="h-8 w-8 text-slate-500" />
+                              <span className="text-[10px] text-slate-500 uppercase tracking-wider">No withdrawal requests found</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedWithdrawals.map((w) => {
+                          const statusLower = (w.status || '').toLowerCase();
+                          let statusColor = 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/25';
+                          let statusLabel = 'Pending';
+                          if (statusLower === 'processing') {
+                            statusColor = 'bg-blue-500/10 text-blue-400 border border-blue-500/25';
+                            statusLabel = 'Processing';
+                          } else if (statusLower === 'completed' || statusLower === 'success') {
+                            statusColor = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25';
+                            statusLabel = 'Completed';
+                          } else if (statusLower === 'rejected' || statusLower === 'failed') {
+                            statusColor = 'bg-rose-500/10 text-rose-400 border border-rose-500/25';
+                            statusLabel = 'Rejected';
+                          } else if (statusLower === 'cancelled') {
+                            statusColor = 'bg-slate-500/10 text-slate-400 border border-slate-500/25';
+                            statusLabel = 'Cancelled';
+                          }
+
+                          return (
+                            <tr key={w.id} className="hover:bg-white/[0.01] transition-all">
+                              <td className="py-3 px-4">
+                                <div className="font-bold text-white leading-tight">
+                                  {w.accountName || w.accountname || 'Anonymous User'}
+                                </div>
+                                <div className="text-[9px] text-slate-500 font-mono truncate max-w-[150px]">
+                                  {w.email || w.userId}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 font-bold text-emerald-400 font-mono">
+                                ₦{Number(w.amount || 0).toLocaleString()}
+                              </td>
+                              <td className="py-3 px-4 text-slate-300 font-medium">
+                                {w.bankName || w.bankname}
+                              </td>
+                              <td className="py-3 px-4 text-slate-400 font-mono">
+                                {maskAccountNumber(w.accountNumber || w.accountnumber)}
+                              </td>
+                              <td className="py-3 px-4 text-slate-400 font-mono text-[10px]">
+                                {new Date(w.timestamp || w.created_at).toLocaleDateString()} &bull; {new Date(w.timestamp || w.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-teal-400 text-[10px] select-all">
+                                {w.reference}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wide ${statusColor}`}>
+                                  {statusLabel}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigateTo && navigateTo(`/admin/withdrawals/${w.id}`);
+                                  }}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-teal-500/10 to-indigo-500/10 hover:from-teal-500 hover:to-indigo-500 text-teal-400 hover:text-slate-950 rounded-lg text-[9px] font-bold uppercase tracking-wider border border-teal-500/20 hover:border-transparent transition-all cursor-pointer"
+                                >
+                                  View Details
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalWithdrawalPages > 1 && (
+                  <div className="flex items-center justify-between p-4 border-t border-white/5 bg-slate-950/20 text-[10px] font-mono text-slate-400">
+                    <button
+                      disabled={withdrawalPage === 1}
+                      onClick={() => setWithdrawalPage(prev => Math.max(prev - 1, 1))}
+                      className="px-3 py-1.5 rounded bg-white/5 border border-white/10 text-white disabled:opacity-40 hover:bg-white/10 transition-all cursor-pointer"
+                    >
+                      PREV
+                    </button>
+                    <span>
+                      PAGE {withdrawalPage} OF {totalWithdrawalPages}
+                    </span>
+                    <button
+                      disabled={withdrawalPage === totalWithdrawalPages}
+                      onClick={() => setWithdrawalPage(prev => Math.min(prev + 1, totalWithdrawalPages))}
+                      className="px-3 py-1.5 rounded bg-white/5 border border-white/10 text-white disabled:opacity-40 hover:bg-white/10 transition-all cursor-pointer"
+                    >
+                      NEXT
+                    </button>
+                  </div>
+                )}
               </GlassCard>
             </div>
           )}

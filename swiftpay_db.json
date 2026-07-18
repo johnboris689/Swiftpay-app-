@@ -25,22 +25,7 @@
       "transactions": []
     }
   ],
-  "vouchers": [
-    {
-      "code": "WDV-7674-2206-6501",
-      "amount": 6500,
-      "status": "unused",
-      "usedby": "",
-      "usedat": ""
-    },
-    {
-      "code": "WDV-9001-3029-8675",
-      "amount": 6500,
-      "status": "unused",
-      "usedby": "",
-      "usedat": ""
-    }
-  ],
+  "vouchers": [],
   "password_resets": [],
   "admin_settings": {
     "supportEmail": "support@swiftpay.com",

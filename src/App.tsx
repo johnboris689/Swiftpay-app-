@@ -1712,7 +1712,8 @@ export default function App() {
     normalizedPath === '/admin' || 
     adminPath === '/admin/login' || 
     adminPath === '/admin' || 
-    adminPath === '/admin/';
+    adminPath === '/admin/' ||
+    adminPath.startsWith('/admin/withdrawals/');
 
   if (!isValidRoute) {
     return <Custom404Page navigateTo={navigateTo} />;
@@ -1795,7 +1796,7 @@ export default function App() {
   }
 
   // Render Secure Admin Workspace (Point 1, 2, 3, 4)
-  if (adminPath === '/admin' || adminPath === '/admin/') {
+  if (adminPath === '/admin' || adminPath === '/admin/' || adminPath.startsWith('/admin/withdrawals/')) {
     if (!isAdminAuthenticated) {
       return (
         <div className="min-h-screen bg-[#050507] text-white flex items-center justify-center font-mono text-sm tracking-widest uppercase animate-pulse">
@@ -1819,6 +1820,8 @@ export default function App() {
           <AdminPanel
             currentUserEmail="admin@swiftpay.com"
             transactions={transactions}
+            adminPath={adminPath}
+            navigateTo={navigateTo}
             onBack={() => {
               localStorage.removeItem('swiftpay_admin_auth');
               localStorage.removeItem('swiftpay_admin_token');
@@ -4140,6 +4143,8 @@ export default function App() {
                   <AdminPanel
                     currentUserEmail={user?.email || 'admin@swiftpay.com'}
                     transactions={transactions}
+                    adminPath={adminPath}
+                    navigateTo={navigateTo}
                     onBack={() => {
                       setCurrentScreen('dashboard');
                       setActiveTab('profile');
