@@ -130,6 +130,10 @@ interface UserState {
   wdvVerified?: boolean;
   isWdvVerified?: boolean;
   welcomeRewardShown?: boolean;
+  giftDay?: number;
+  giftActive?: boolean;
+  lastGiftCreditTime?: string;
+  giftExpiresAt?: string;
 }
 
 interface WdvConfig {
@@ -232,7 +236,11 @@ async function loadDbCache() {
       transactions: safeParseJson(row.transactions, []),
       wdvVerified: row.wdvverified === 1 || row.iswdvverified === 1,
       isWdvVerified: row.iswdvverified === 1 || row.wdvverified === 1,
-      welcomeRewardShown: row.welcomerewardshown === 1
+      welcomeRewardShown: row.welcomerewardshown === 1,
+      giftDay: Number(row.giftday ?? 0),
+      giftActive: row.giftactive !== 0, // default true if null or not 0
+      lastGiftCreditTime: row.lastgiftcredittime || '',
+      giftExpiresAt: row.giftexpiresat || ''
     }));
 
     // Fetch vouchers - load all database-backed vouchers with complete fields
@@ -309,8 +317,9 @@ async function persistDbCache(data: DBStructure) {
           fullName, username, email, phone, passwordHash, balance, dailyTarget, dailySpent,
           pinCreated, pinCode, biometricEnabled, profilePic, tier, isSuspended, isFrozen,
           registrationDate, accountStatus, beneficiaries, phoneBeneficiaries, loginHistory,
-          notifications, transactions, wdvVerified, isWdvVerified, welcomeRewardShown
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+          notifications, transactions, wdvVerified, isWdvVerified, welcomeRewardShown,
+          giftDay, giftActive, lastGiftCreditTime, giftExpiresAt
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
         ON CONFLICT(email) DO UPDATE SET
           fullName = EXCLUDED.fullName,
           phone = EXCLUDED.phone,
@@ -334,7 +343,11 @@ async function persistDbCache(data: DBStructure) {
           transactions = EXCLUDED.transactions,
           wdvVerified = EXCLUDED.wdvVerified,
           isWdvVerified = EXCLUDED.isWdvVerified,
-          welcomeRewardShown = EXCLUDED.welcomeRewardShown
+          welcomeRewardShown = EXCLUDED.welcomeRewardShown,
+          giftDay = EXCLUDED.giftDay,
+          giftActive = EXCLUDED.giftActive,
+          lastGiftCreditTime = EXCLUDED.lastGiftCreditTime,
+          giftExpiresAt = EXCLUDED.giftExpiresAt
       `, [
         u.fullName,
         u.email.split('@')[0],
@@ -360,7 +373,11 @@ async function persistDbCache(data: DBStructure) {
         JSON.stringify(u.transactions || []),
         u.wdvVerified || u.isWdvVerified ? 1 : 0,
         u.isWdvVerified || u.wdvVerified ? 1 : 0,
-        u.welcomeRewardShown ? 1 : 0
+        u.welcomeRewardShown ? 1 : 0,
+        u.giftDay || 0,
+        u.giftActive ? 1 : 0,
+        u.lastGiftCreditTime || '',
+        u.giftExpiresAt || ''
       ]);
     }
 
@@ -419,12 +436,13 @@ function readDb(): DBStructure {
   return dbCache;
 }
 
-function writeDb(data: DBStructure) {
+async function writeDb(data: DBStructure): Promise<void> {
   dbCache = data;
   const currentWrite = persistDbCache(data).catch(err => {
     console.error('[SwiftPay DB] Error during database persistence:', err);
   });
   pendingWritePromise = Promise.all([pendingWritePromise, currentWrite]);
+  await currentWrite;
 }
 
 // -------------------- SECURE AUTHENTICATION TOKENS (JWT-like) --------------------
@@ -451,6 +469,75 @@ function verifyToken(token: string): string | null {
     return null;
   }
   return null;
+}
+
+// -------------------- 3-DAY DAILY ₦200,000 GIFT SYSTEM ENGINE --------------------
+function processUserGiftEligibility(user: UserState): { updated: boolean; user: UserState } {
+  if (user.giftActive === false) {
+    return { updated: false, user };
+  }
+
+  const now = new Date();
+  
+  if (!user.registrationDate) {
+    user.registrationDate = now.toISOString();
+  }
+  const regDate = new Date(user.registrationDate);
+
+  if (user.giftDay === undefined) user.giftDay = 1;
+  if (user.giftActive === undefined) user.giftActive = true;
+  if (!user.lastGiftCreditTime) user.lastGiftCreditTime = user.registrationDate;
+  if (!user.giftExpiresAt) {
+    user.giftExpiresAt = new Date(regDate.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  const expiresAt = new Date(user.giftExpiresAt);
+
+  if (now.getTime() >= expiresAt.getTime()) {
+    user.giftActive = false;
+    return { updated: true, user };
+  }
+
+  const lastCreditTime = new Date(user.lastGiftCreditTime);
+  const msDiff = now.getTime() - lastCreditTime.getTime();
+  const hoursDiff = msDiff / (1000 * 60 * 60);
+
+  if (hoursDiff >= 24) {
+    const nextDay = user.giftDay + 1;
+    if (nextDay <= 3) {
+      user.giftDay = nextDay;
+      user.balance = 200000;
+      user.lastGiftCreditTime = now.toISOString();
+
+      user.transactions = user.transactions || [];
+      user.transactions.unshift({
+        id: `tx-${Date.now()}-gift-day-${nextDay}`,
+        type: 'promotional_bonus',
+        amount: 200000,
+        date: now.toISOString(),
+        status: 'success',
+        description: `Day ${nextDay} Promotional Bonus`,
+        narration: `SwiftPay Daily Gift Reset`
+      });
+
+      user.notifications = user.notifications || [];
+      user.notifications.unshift({
+        id: `notif-${Date.now()}-gift-day-${nextDay}`,
+        title: `Day ${nextDay} Gift Credited`,
+        body: `Your wallet balance has been automatically reset to ₦200,000 for Day ${nextDay} of your registration bonus.`,
+        date: now.toISOString(),
+        unread: true
+      });
+
+      console.log(`[Gift System] User ${user.email} successfully received Day ${nextDay} ₦200,000 reset.`);
+      return { updated: true, user };
+    } else {
+      user.giftActive = false;
+      return { updated: true, user };
+    }
+  }
+
+  return { updated: false, user };
 }
 
 // Token Verification Middleware
@@ -497,12 +584,24 @@ function authenticateToken(req: any, res: any, next: any) {
           date: new Date().toISOString(),
           unread: true
         }
-      ]
+      ],
+      giftDay: 1,
+      giftActive: true,
+      lastGiftCreditTime: new Date().toISOString(),
+      giftExpiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
     };
     db.users.push(dummyUser);
     writeDb(db);
     userIndex = db.users.length - 1;
     logDiagnostic('INFO', 'Auto-created missing user record for authenticated session', { email });
+  }
+
+  // Check and process registration gift eligibility
+  const user = db.users[userIndex];
+  const { updated, user: updatedUser } = processUserGiftEligibility(user);
+  if (updated) {
+    db.users[userIndex] = updatedUser;
+    writeDb(db);
   }
 
   req.userIndex = userIndex;
@@ -628,6 +727,10 @@ app.post('/api/auth/register', (req, res) => {
     accountStatus: 'active',
     emailVerificationStatus: 'verified',
     welcomeRewardShown: false,
+    giftDay: 1,
+    giftActive: true,
+    lastGiftCreditTime: new Date().toISOString(),
+    giftExpiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
     transactions: [
       {
         id: `tx-${Date.now()}-bonus`,
@@ -1076,7 +1179,7 @@ app.post('/api/user/sync-state', authenticateToken, (req: any, res) => {
   }
 
   const allowedFields = [
-    'balance', 'dailyTarget', 'dailySpent', 'pinCreated', 'pinCode', 
+    'dailyTarget', 'dailySpent', 'pinCreated', 'pinCode', 
     'biometricEnabled', 'phone', 'profilePic', 'tier',
     'transactions', 'notifications', 'beneficiaries', 'phoneBeneficiaries', 'loginHistory'
   ];
@@ -1431,7 +1534,7 @@ app.post('/api/transactions/airtime', authenticateToken, async (req: any, res) =
     unread: true
   });
 
-  writeDb(refreshedDb);
+  await writeDb(refreshedDb);
   logDiagnostic('INFO', 'Airtime purchase complete', { email, amount: price, phoneNumber });
 
   res.json({
@@ -1570,7 +1673,7 @@ app.post('/api/transactions/data', authenticateToken, async (req: any, res) => {
     unread: true
   });
 
-  writeDb(refreshedDb);
+  await writeDb(refreshedDb);
   logDiagnostic('INFO', 'Data purchase complete', { email, amount: price, phoneNumber });
 
   res.json({
@@ -1667,7 +1770,7 @@ app.post('/api/transactions/transfer', authenticateToken, async (req: any, res) 
     unread: true
   });
 
-  writeDb(refreshedDb);
+  await writeDb(refreshedDb);
   logDiagnostic('INFO', 'Bank cashout complete', { email, amount: price, accountNumber });
 
   res.json({
@@ -1793,7 +1896,7 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req: any, res) 
     console.error('[SwiftPay DB] Error saving withdrawal request to SQL table:', err);
   }
 
-  writeDb(refreshedDb);
+  await writeDb(refreshedDb);
   logDiagnostic('INFO', 'Withdrawal requested and saved to SQL', { email, amount: price, accountNumber, voucherCode });
 
   res.json({
@@ -1883,7 +1986,7 @@ app.post('/api/transactions/bills', authenticateToken, async (req: any, res) => 
     unread: true
   });
 
-  writeDb(refreshedDb);
+  await writeDb(refreshedDb);
   logDiagnostic('INFO', 'Bill payment complete', { email, type, provider, amount: price, accountNumber });
 
   res.json({

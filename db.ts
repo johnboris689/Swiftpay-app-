@@ -299,7 +299,11 @@ export async function initDb() {
       transactions TEXT,
       wdvVerified INTEGER DEFAULT 0,
       isWdvVerified INTEGER DEFAULT 0,
-      welcomeRewardShown INTEGER DEFAULT 0
+      welcomeRewardShown INTEGER DEFAULT 0,
+      giftDay INTEGER DEFAULT 0,
+      giftActive INTEGER DEFAULT 1,
+      lastGiftCreditTime TEXT,
+      giftExpiresAt TEXT
     )
   `);
 
@@ -311,6 +315,18 @@ export async function initDb() {
   } catch (e) {}
   try {
     await execute(`ALTER TABLE users ADD COLUMN IF NOT EXISTS welcomeRewardShown INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE users ADD COLUMN IF NOT EXISTS giftDay INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE users ADD COLUMN IF NOT EXISTS giftActive INTEGER DEFAULT 1`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE users ADD COLUMN IF NOT EXISTS lastGiftCreditTime TEXT`);
+  } catch (e) {}
+  try {
+    await execute(`ALTER TABLE users ADD COLUMN IF NOT EXISTS giftExpiresAt TEXT`);
   } catch (e) {}
   try {
     await execute(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS redeemedBy TEXT DEFAULT '[]'`);
@@ -685,7 +701,12 @@ export function execute(sql: string, params: any[] = []): Promise<any> {
             notifications: params[20] || '[]',
             transactions: params[21] || '[]',
             wdvverified: Number(params[22] ?? 0),
-            iswdvverified: Number(params[23] ?? 0)
+            iswdvverified: Number(params[23] ?? 0),
+            welcomerewardshown: Number(params[24] ?? 0),
+            giftday: Number(params[25] ?? 0),
+            giftactive: Number(params[26] ?? 1),
+            lastgiftcredittime: params[27] || '',
+            giftexpiresat: params[28] || ''
           };
           db.users = db.users.filter(x => x.email !== u.email);
           db.users.push(u);

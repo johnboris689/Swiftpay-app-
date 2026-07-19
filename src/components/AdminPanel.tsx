@@ -965,39 +965,39 @@ export default function AdminPanel({
     const hasSlip = !!(selectedWithdrawal.posSlipPath || selectedWithdrawal.posslippath);
 
     return (
-      <div className="p-4 md:p-8 space-y-8 h-full overflow-y-auto no-scrollbar animate-[fadeIn_0.3s_ease-out] bg-[#06060a]">
+      <div className="w-full bg-[#050508] p-4 md:p-8 lg:p-12 space-y-8 h-full overflow-y-auto no-scrollbar animate-[fadeIn_0.3s_ease-out]">
         {/* Navigation Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-6">
           <button
             onClick={() => {
               setActiveTab('withdrawals');
               navigateTo && navigateTo('/admin');
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-slate-300 hover:text-white text-xs font-bold cursor-pointer w-fit"
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all text-slate-300 hover:text-white text-xs font-semibold cursor-pointer w-fit shadow-md hover:scale-[1.02]"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4 text-slate-400" />
             Back to Withdrawals
           </button>
           <div className="text-left sm:text-right">
-            <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase">SYSTEM AUDIT REFERENCE</span>
-            <span className="text-xs md:text-sm font-bold text-teal-400 font-mono">{selectedWithdrawal.reference || selectedWithdrawal.id}</span>
+            <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">SYSTEM AUDIT REFERENCE</span>
+            <span className="text-sm font-mono font-bold text-teal-400">{selectedWithdrawal.reference || selectedWithdrawal.id}</span>
           </div>
         </div>
 
         {/* 1. Large Status Card (Transaction Processing) */}
-        <div className="p-6 md:p-8 rounded-3xl border border-amber-500/20 bg-amber-500/[0.03] backdrop-blur-md shadow-[0_0_50px_-12px_rgba(245,158,11,0.12)] flex flex-col lg:flex-row items-center justify-between gap-6">
-          <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
+        <div className="max-w-[1600px] mx-auto p-6 md:p-10 rounded-[2rem] border border-amber-500/20 bg-amber-500/[0.02] backdrop-blur-md shadow-[0_0_80px_-20px_rgba(245,158,11,0.08)] flex flex-col lg:flex-row items-center justify-between gap-8">
+          <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left w-full lg:w-auto">
             <div className="relative flex items-center justify-center shrink-0">
-              <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping opacity-75" style={{ animationDuration: '2.5s' }}></div>
-              <div className="relative p-4.5 rounded-full bg-amber-500/10 border border-amber-500/30">
-                <RefreshCw className="h-8 w-8 text-amber-500 animate-[spin_4s_linear_infinite]" />
+              <div className="absolute inset-0 rounded-full bg-amber-500/10 animate-ping opacity-60" style={{ animationDuration: '3s' }}></div>
+              <div className="relative p-5 rounded-full bg-amber-500/10 border border-amber-500/20 shadow-lg">
+                <RefreshCw className="h-9 w-9 text-amber-500 animate-[spin_5s_linear_infinite]" />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <h2 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center justify-center sm:justify-start gap-2">
+            <div className="space-y-2">
+              <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight flex items-center justify-center sm:justify-start gap-3">
                 Transaction Processing
                 {statusLower !== 'pending' && statusLower !== 'processing' && (
-                  <span className={`text-xs px-2.5 py-0.5 rounded-full border uppercase ${
+                  <span className={`text-[10px] tracking-widest px-3 py-1 rounded-full border font-bold uppercase ${
                     statusLower === 'completed' || statusLower === 'success'
                       ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                       : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
@@ -1006,25 +1006,25 @@ export default function AdminPanel({
                   </span>
                 )}
               </h2>
-              <p className="text-sm text-slate-300 font-medium">This withdrawal request is awaiting manual verification.</p>
+              <p className="text-sm md:text-base text-slate-300 font-medium">This withdrawal request is awaiting manual verification.</p>
             </div>
           </div>
-          <div className="text-center lg:text-right shrink-0">
-            <span className="text-[10px] text-amber-500 font-mono tracking-widest block uppercase font-bold">WITHDRAWAL AMOUNT</span>
-            <span className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 font-mono">
+          <div className="text-center lg:text-right shrink-0 w-full lg:w-auto border-t lg:border-t-0 border-white/5 pt-6 lg:pt-0">
+            <span className="text-[10px] text-amber-500 font-mono tracking-widest block uppercase font-bold mb-1">WITHDRAWAL AMOUNT</span>
+            <span className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 font-mono">
               ₦{Number(selectedWithdrawal.amount || 0).toLocaleString()}
             </span>
           </div>
         </div>
 
         {/* 2. Modern Account Details Section */}
-        <div className="space-y-4">
-          <div className="border-b border-white/5 pb-2">
-            <h3 className="text-base font-black text-white uppercase tracking-wider">Account Details</h3>
-            <p className="text-xs text-slate-400">Validated recipient banking details and request specifications.</p>
+        <div className="max-w-[1600px] mx-auto space-y-6">
+          <div className="border-b border-white/5 pb-4">
+            <h3 className="text-lg font-black text-white uppercase tracking-wider">Account Details</h3>
+            <p className="text-xs text-slate-400 mt-1">Validated recipient banking details and request specifications.</p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {renderFieldCard("Full Name", selectedWithdrawal.fullName || selectedWithdrawal.accountName || selectedWithdrawal.accountname || 'N/A', User, "text-indigo-400")}
             {renderFieldCard("Email Address", selectedWithdrawal.email || selectedWithdrawal.userId || 'N/A', Mail, "text-violet-400")}
             {renderFieldCard("Phone Number", selectedWithdrawal.phone || 'N/A', Phone, "text-purple-400")}
@@ -1039,7 +1039,7 @@ export default function AdminPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* POS Slip Area (7 cols on lg) */}
           <div className="lg:col-span-7 space-y-6">
             {/* POS Decline Slip Terminal */}

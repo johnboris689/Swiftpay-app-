@@ -1852,8 +1852,9 @@ export default function App() {
         </div>
       );
     }
+    const isWithdrawalDetailsPath = adminPath.startsWith('/admin/withdrawals/');
     return (
-      <div className="min-h-screen bg-[#050507] [background:radial-gradient(circle_at_0%_0%,#1e1b4b_0%,#050507_50%),radial-gradient(circle_at_100%_100%,#0f172a_0%,#050507_50%)] text-white flex flex-col p-4 md:p-8 font-sans">
+      <div className="min-h-screen bg-[#050507] [background:radial-gradient(circle_at_0%_0%,#1e1b4b_0%,#050507_50%),radial-gradient(circle_at_100%_100%,#0f172a_0%,#050507_50%)] text-white flex flex-col font-sans">
         {toastMessage && (
           <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 animate-[slideDown_0.2s_ease-out]">
             <div className={`p-3.5 rounded-xl text-xs font-semibold shadow-xl border backdrop-blur-md flex items-center gap-2.5 ${
@@ -1864,34 +1865,67 @@ export default function App() {
             </div>
           </div>
         )}
-        <div className="max-w-7xl w-full mx-auto bg-[#0c0c14]/90 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-xl">
-          <AdminPanel
-            currentUserEmail="admin@swiftpay.com"
-            transactions={transactions}
-            adminPath={adminPath}
-            navigateTo={navigateTo}
-            onBack={() => {
-              localStorage.removeItem('swiftpay_admin_auth');
-              localStorage.removeItem('swiftpay_admin_token');
-              setIsAdminAuthenticated(false);
-              navigateTo('/admin/login');
-            }}
-            onToast={(msg, type) => showToast(msg, type)}
-            onAddGlobalNotification={(title, body, type) => {
-              const newNotif = {
-                id: 'notif-' + Date.now(),
-                title,
-                body,
-                date: new Date().toISOString(),
-                unread: true
-              };
-              const updated = [newNotif, ...notifications];
-              setNotifications(updated);
-              localStorage.setItem('swiftpay_notifications', JSON.stringify(updated));
-            }}
-            onSendSimulatedEmail={(to, subject, body) => sendSimulatedEmail(to, subject, body)}
-          />
-        </div>
+        {isWithdrawalDetailsPath ? (
+          <div className="w-full flex-1 flex flex-col">
+            <AdminPanel
+              currentUserEmail="admin@swiftpay.com"
+              transactions={transactions}
+              adminPath={adminPath}
+              navigateTo={navigateTo}
+              onBack={() => {
+                localStorage.removeItem('swiftpay_admin_auth');
+                localStorage.removeItem('swiftpay_admin_token');
+                setIsAdminAuthenticated(false);
+                navigateTo('/admin/login');
+              }}
+              onToast={(msg, type) => showToast(msg, type)}
+              onAddGlobalNotification={(title, body, type) => {
+                const newNotif = {
+                  id: 'notif-' + Date.now(),
+                  title,
+                  body,
+                  date: new Date().toISOString(),
+                  unread: true
+                };
+                const updated = [newNotif, ...notifications];
+                setNotifications(updated);
+                localStorage.setItem('swiftpay_notifications', JSON.stringify(updated));
+              }}
+              onSendSimulatedEmail={(to, subject, body) => sendSimulatedEmail(to, subject, body)}
+            />
+          </div>
+        ) : (
+          <div className="p-4 md:p-8 flex-1 flex flex-col">
+            <div className="max-w-7xl w-full mx-auto bg-[#0c0c14]/90 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-xl flex-1 flex flex-col">
+              <AdminPanel
+                currentUserEmail="admin@swiftpay.com"
+                transactions={transactions}
+                adminPath={adminPath}
+                navigateTo={navigateTo}
+                onBack={() => {
+                  localStorage.removeItem('swiftpay_admin_auth');
+                  localStorage.removeItem('swiftpay_admin_token');
+                  setIsAdminAuthenticated(false);
+                  navigateTo('/admin/login');
+                }}
+                onToast={(msg, type) => showToast(msg, type)}
+                onAddGlobalNotification={(title, body, type) => {
+                  const newNotif = {
+                    id: 'notif-' + Date.now(),
+                    title,
+                    body,
+                    date: new Date().toISOString(),
+                    unread: true
+                  };
+                  const updated = [newNotif, ...notifications];
+                  setNotifications(updated);
+                  localStorage.setItem('swiftpay_notifications', JSON.stringify(updated));
+                }}
+                onSendSimulatedEmail={(to, subject, body) => sendSimulatedEmail(to, subject, body)}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
