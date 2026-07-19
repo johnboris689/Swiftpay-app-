@@ -2210,12 +2210,12 @@ const uploadPosSlip = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB maximum size
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const mimetypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
-    const validExts = ['.png', '.jpg', '.jpeg', '.pdf'];
+    const mimetypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
+    const validExts = ['.png', '.jpg', '.jpeg', '.webp', '.pdf'];
     if (mimetypes.includes(file.mimetype) || validExts.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PNG, JPG, JPEG, and PDF files are allowed.'));
+      cb(new Error('Only PNG, JPG, JPEG, WEBP, and PDF files are allowed.'));
     }
   }
 });
@@ -2372,6 +2372,24 @@ app.post('/api/admin/withdrawals/:transactionId/upload-slip', authenticateAdminT
   } catch (err) {
     console.error('Error saving POS slip:', err);
     res.status(500).json({ error: 'Failed to upload POS decline slip' });
+  }
+});
+
+// Remove POS decline slip
+app.post('/api/admin/withdrawals/:transactionId/remove-slip', authenticateAdminToken, async (req, res) => {
+  const { transactionId } = req.params;
+  const adminEmail = (req as any).adminEmail;
+  try {
+    await execute(`
+      UPDATE withdraw_requests 
+      SET posSlipPath = NULL, posSlipUploadedAt = NULL, posSlipUploadedBy = NULL
+      WHERE id = $1
+    `, [transactionId]);
+    logDiagnostic('INFO', `Admin ${adminEmail} removed POS slip for ${transactionId}`);
+    res.json({ success: true, message: 'POS decline slip removed successfully' });
+  } catch (err) {
+    console.error('Error removing POS slip:', err);
+    res.status(500).json({ error: 'Failed to remove POS decline slip' });
   }
 });
 
