@@ -20,8 +20,8 @@ export default function LiveTicker() {
   const generateRandomWithdrawalText = () => {
     const firstName = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
     const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
-    // Multiples of 5,000 between 100,000 and 500,000 inclusive
-    const amountVal = Math.floor(Math.random() * 81) * 5000 + 100000;
+    // Multiples of 500 between 100,000 and 200,000 inclusive
+    const amountVal = Math.floor(Math.random() * 201) * 500 + 100000;
     const formattedAmount = `₦${amountVal.toLocaleString()}`;
     return `${firstName} ${lastName} withdrew ${formattedAmount}`;
   };

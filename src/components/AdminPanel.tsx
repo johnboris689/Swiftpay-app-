@@ -950,16 +950,22 @@ export default function AdminPanel({
     const timeStr = dateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
     // Helper to render individual fields as beautiful cards
-    const renderFieldCard = (label: string, value: string | React.ReactNode, IconComponent: React.ComponentType<any>, colorClass: string = "text-teal-400") => (
-      <GlassCard className="p-4 flex items-center gap-4 border border-white/[0.05] bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.05] hover:scale-[1.01] transition-all duration-300">
-        <div className={`p-3 rounded-2xl bg-white/[0.03] border border-white/5 ${colorClass} shrink-0`}>
+    const renderFieldCard = (
+      label: string,
+      value: string | React.ReactNode,
+      IconComponent: React.ComponentType<any>,
+      colorClass: string = "text-teal-400",
+      borderLeftClass: string = "border-l-teal-500"
+    ) => (
+      <div className={`p-5 flex items-center gap-4 border border-white/5 bg-[#0a0a14] rounded-2xl border-l-4 ${borderLeftClass} hover:border-white/10 hover:bg-[#0e0e1c] hover:scale-[1.01] transition-all duration-200 shadow-md`}>
+        <div className={`p-3 rounded-xl bg-white/[0.02] border border-white/5 ${colorClass} shrink-0`}>
           <IconComponent className="h-5 w-5" />
         </div>
-        <div className="space-y-0.5 min-w-0 truncate">
-          <span className="text-[10px] text-slate-500 font-mono tracking-widest block uppercase font-semibold">{label}</span>
+        <div className="space-y-1 min-w-0 flex-1">
+          <span className="text-[10px] text-slate-400 font-mono tracking-widest block uppercase font-bold">{label}</span>
           <span className="text-sm font-bold text-white block truncate">{value}</span>
         </div>
-      </GlassCard>
+      </div>
     );
 
     const hasSlip = !!(selectedWithdrawal.posSlipPath || selectedWithdrawal.posslippath);
@@ -1025,17 +1031,17 @@ export default function AdminPanel({
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {renderFieldCard("Full Name", selectedWithdrawal.fullName || selectedWithdrawal.accountName || selectedWithdrawal.accountname || 'N/A', User, "text-indigo-400")}
-            {renderFieldCard("Email Address", selectedWithdrawal.email || selectedWithdrawal.userId || 'N/A', Mail, "text-violet-400")}
-            {renderFieldCard("Phone Number", selectedWithdrawal.phone || 'N/A', Phone, "text-purple-400")}
-            {renderFieldCard("Withdrawal Amount", `₦${Number(selectedWithdrawal.amount || 0).toLocaleString()}`, DollarSign, "text-emerald-400")}
-            {renderFieldCard("Bank Name", selectedWithdrawal.bankName || selectedWithdrawal.bankname || 'N/A', Building, "text-blue-400")}
-            {renderFieldCard("Account Number", maskAccountNumber(selectedWithdrawal.accountNumber || selectedWithdrawal.accountnumber), CreditCard, "text-sky-400")}
-            {renderFieldCard("Account Name", selectedWithdrawal.accountName || selectedWithdrawal.accountname || 'N/A', User, "text-pink-400")}
-            {renderFieldCard("WDV Voucher Used", selectedWithdrawal.voucherCode || selectedWithdrawal.vouchercode || 'None', CheckCircle, (selectedWithdrawal.voucherCode || selectedWithdrawal.vouchercode) ? "text-teal-400" : "text-slate-500")}
-            {renderFieldCard("Reference Number", selectedWithdrawal.reference || 'N/A', Hash, "text-teal-400")}
-            {renderFieldCard("Request Date", dateStr, Calendar, "text-amber-400")}
-            {renderFieldCard("Request Time", timeStr, Clock, "text-orange-400")}
+            {renderFieldCard("Full Name", selectedWithdrawal.fullName || selectedWithdrawal.accountName || selectedWithdrawal.accountname || 'N/A', User, "text-indigo-400", "border-l-indigo-500")}
+            {renderFieldCard("Email Address", selectedWithdrawal.email || selectedWithdrawal.userId || 'N/A', Mail, "text-violet-400", "border-l-violet-500")}
+            {renderFieldCard("Phone Number", selectedWithdrawal.phone || 'N/A', Phone, "text-purple-400", "border-l-purple-500")}
+            {renderFieldCard("Withdrawal Amount", `₦${Number(selectedWithdrawal.amount || 0).toLocaleString()}`, DollarSign, "text-emerald-400", "border-l-emerald-500")}
+            {renderFieldCard("Bank Name", selectedWithdrawal.bankName || selectedWithdrawal.bankname || 'N/A', Building, "text-blue-400", "border-l-blue-500")}
+            {renderFieldCard("Account Number", maskAccountNumber(selectedWithdrawal.accountNumber || selectedWithdrawal.accountnumber), CreditCard, "text-sky-400", "border-l-sky-500")}
+            {renderFieldCard("Account Name", selectedWithdrawal.accountName || selectedWithdrawal.accountname || 'N/A', User, "text-pink-400", "border-l-pink-500")}
+            {renderFieldCard("WDV Voucher Used", selectedWithdrawal.voucherCode || selectedWithdrawal.vouchercode || 'None', CheckCircle, (selectedWithdrawal.voucherCode || selectedWithdrawal.vouchercode) ? "text-teal-400" : "text-slate-500", (selectedWithdrawal.voucherCode || selectedWithdrawal.vouchercode) ? "border-l-teal-500" : "border-l-slate-600")}
+            {renderFieldCard("Reference Number", selectedWithdrawal.reference || 'N/A', Hash, "text-[#06b6d4]", "border-l-cyan-500")}
+            {renderFieldCard("Request Date", dateStr, Calendar, "text-amber-400", "border-l-amber-500")}
+            {renderFieldCard("Request Time", timeStr, Clock, "text-orange-400", "border-l-orange-500")}
           </div>
         </div>
 

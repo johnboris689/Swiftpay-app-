@@ -541,7 +541,7 @@ function processUserGiftEligibility(user: UserState): { updated: boolean; user: 
 }
 
 // Token Verification Middleware
-function authenticateToken(req: any, res: any, next: any) {
+async function authenticateToken(req: any, res: any, next: any) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) {
@@ -591,9 +591,33 @@ function authenticateToken(req: any, res: any, next: any) {
       giftExpiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
     };
     db.users.push(dummyUser);
-    writeDb(db);
+    await writeDb(db);
     userIndex = db.users.length - 1;
     logDiagnostic('INFO', 'Auto-created missing user record for authenticated session', { email });
+  }
+
+  // FORCE RELOAD user balance and gift system attributes from SQL database to guarantee latest, never cached values
+  try {
+    const sqlUser = await getRow(`SELECT balance, giftDay, giftActive, lastGiftCreditTime, giftExpiresAt FROM users WHERE email = $1`, [email.toLowerCase()]);
+    if (sqlUser) {
+      if (sqlUser.balance !== undefined && sqlUser.balance !== null) {
+        db.users[userIndex].balance = Number(sqlUser.balance);
+      }
+      if (sqlUser.giftday !== undefined && sqlUser.giftday !== null) {
+        db.users[userIndex].giftDay = Number(sqlUser.giftday);
+      }
+      if (sqlUser.giftactive !== undefined && sqlUser.giftactive !== null) {
+        db.users[userIndex].giftActive = sqlUser.giftactive !== 0;
+      }
+      if (sqlUser.lastgiftcredittime !== undefined && sqlUser.lastgiftcredittime !== null) {
+        db.users[userIndex].lastGiftCreditTime = sqlUser.lastgiftcredittime;
+      }
+      if (sqlUser.giftexpiresat !== undefined && sqlUser.giftexpiresat !== null) {
+        db.users[userIndex].giftExpiresAt = sqlUser.giftexpiresat;
+      }
+    }
+  } catch (err) {
+    console.error('[SwiftPay DB] Error syncing user state from SQL database in middleware:', err);
   }
 
   // Check and process registration gift eligibility
@@ -601,7 +625,7 @@ function authenticateToken(req: any, res: any, next: any) {
   const { updated, user: updatedUser } = processUserGiftEligibility(user);
   if (updated) {
     db.users[userIndex] = updatedUser;
-    writeDb(db);
+    await writeDb(db);
   }
 
   req.userIndex = userIndex;

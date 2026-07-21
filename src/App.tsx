@@ -74,6 +74,77 @@ import TransactionReceipt from './components/TransactionReceipt';
 import AdminPanel from './components/AdminPanel';
 import { DeviceSession, LoginHistoryItem, Beneficiary, SimulatedEmail } from './types';
 
+const CABLE_PROVIDERS = [
+  {
+    id: 'DSTV',
+    name: 'DStv',
+    packages: [
+      { id: 'dstv-premium', name: 'DStv Premium', price: 37000 },
+      { id: 'dstv-compact-plus', name: 'DStv Compact Plus', price: 25000 },
+      { id: 'dstv-compact', name: 'DStv Compact', price: 15700 },
+      { id: 'dstv-confam', name: 'DStv Confam', price: 9300 },
+      { id: 'dstv-yanga', name: 'DStv Yanga', price: 5100 },
+      { id: 'dstv-padi', name: 'DStv Padi', price: 3600 }
+    ]
+  },
+  {
+    id: 'GOTV',
+    name: 'GOtv',
+    packages: [
+      { id: 'gotv-supa-plus', name: 'GOtv Supa+', price: 15700 },
+      { id: 'gotv-supa', name: 'GOtv Supa', price: 9600 },
+      { id: 'gotv-max', name: 'GOtv Max', price: 7200 },
+      { id: 'gotv-jolli', name: 'GOtv Jolli', price: 4850 },
+      { id: 'gotv-jinja', name: 'GOtv Jinja', price: 3300 },
+      { id: 'gotv-lite', name: 'GOtv Lite', price: 1575 }
+    ]
+  },
+  {
+    id: 'StarTimes',
+    name: 'StarTimes',
+    packages: [
+      { id: 'startimes-super', name: 'StarTimes Super', price: 8200 },
+      { id: 'startimes-classic', name: 'StarTimes Classic', price: 5000 },
+      { id: 'startimes-smart', name: 'StarTimes Smart', price: 3800 },
+      { id: 'startimes-nova', name: 'StarTimes Nova', price: 1700 }
+    ]
+  },
+  {
+    id: 'Showmax',
+    name: 'Showmax',
+    packages: [
+      { id: 'showmax-pro', name: 'Showmax Pro', price: 6500 },
+      { id: 'showmax-entertainment', name: 'Showmax Entertainment', price: 2900 },
+      { id: 'showmax-mobile', name: 'Showmax Mobile', price: 1500 }
+    ]
+  }
+];
+
+const DISCOS_PROVIDERS = [
+  { id: 'AEDC', name: 'Abuja Electricity (AEDC)' },
+  { id: 'EKEDC', name: 'Eko Electricity (EKEDC)' },
+  { id: 'IKEDC', name: 'Ikeja Electric (IKEDC)' },
+  { id: 'IBEDC', name: 'Ibadan Electricity (IBEDC)' },
+  { id: 'KEDCO', name: 'Kano Electricity (KEDCO)' },
+  { id: 'KAEDCO', name: 'Kaduna Electricity (KAEDCO)' },
+  { id: 'JED', name: 'Jos Electricity (JED)' },
+  { id: 'EEDC', name: 'Enugu Electricity (EEDC)' },
+  { id: 'BEDC', name: 'Benin Electricity (BEDC)' },
+  { id: 'PHED', name: 'Port Harcourt Electricity (PHED)' }
+];
+
+const BETTING_PROVIDERS = [
+  { id: 'SportyBet', name: 'SportyBet' },
+  { id: 'Bet9ja', name: 'Bet9ja' },
+  { id: '1xBet', name: '1xBet Nigeria' },
+  { id: 'BetKing', name: 'BetKing' },
+  { id: 'Betway', name: 'Betway' },
+  { id: 'Merrybet', name: 'Merrybet' },
+  { id: 'NairaBet', name: 'NairaBet' },
+  { id: 'Melbet', name: 'Melbet' },
+  { id: 'Paripesa', name: 'Paripesa' }
+];
+
 export default function App() {
   // Theme & App Settings (Light, Dark, System Default)
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
@@ -114,10 +185,23 @@ export default function App() {
   };
 
   useEffect(() => {
-    const handlePopState = () => {
+    const handlePopState = (e: PopStateEvent) => {
       setAdminPath(window.location.pathname);
+      if (!window.location.pathname.startsWith('/admin')) {
+        if (e.state && e.state.appScreen) {
+          setCurrentScreen(e.state.appScreen);
+        } else {
+          setCurrentScreen('dashboard');
+        }
+      }
     };
     window.addEventListener('popstate', handlePopState);
+
+    // Set initial state
+    if (!window.location.pathname.startsWith('/admin')) {
+      window.history.replaceState({ appScreen: 'dashboard' }, '', window.location.pathname + window.location.search);
+    }
+
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
@@ -168,6 +252,18 @@ export default function App() {
 
   // Current screen or tab state
   const [currentScreen, setCurrentScreen] = useState<string>('dashboard');
+  const [wdvBackScreen, setWdvBackScreen] = useState<string>('dashboard');
+  const changeScreen = (screenName: string) => {
+    if (!window.location.pathname.startsWith('/admin')) {
+      if (currentScreen !== screenName) {
+        window.history.pushState({ appScreen: screenName }, '', window.location.pathname + window.location.search);
+      }
+    }
+    if (screenName === 'buy_wdv' && currentScreen !== 'buy_wdv') {
+      setWdvBackScreen(currentScreen);
+    }
+    setCurrentScreen(screenName);
+  };
   const [activeTab, setActiveTab] = useState<string>('wallet');
 
   // Multi-step form values
@@ -301,6 +397,98 @@ export default function App() {
   const [billsAccountNumber, setBillsAccountNumber] = useState('');
   const [billsAmount, setBillsAmount] = useState('');
   const [billsWdvCode, setBillsWdvCode] = useState('');
+  const [billsCablePackage, setBillsCablePackage] = useState('dstv-premium');
+  const [billsMeterType, setBillsMeterType] = useState<'prepaid' | 'postpaid'>('prepaid');
+  const [isMeterValidated, setIsMeterValidated] = useState(false);
+  const [isValidatingMeter, setIsValidatingMeter] = useState(false);
+  const [meterOwnerName, setMeterOwnerName] = useState('');
+  const [meterAddress, setMeterAddress] = useState('');
+
+  // Automatic cable package pricing sync
+  useEffect(() => {
+    if (billsType === 'cable') {
+      const provider = CABLE_PROVIDERS.find(p => p.id === billsProvider);
+      if (provider) {
+        const pkg = provider.packages.find(p => p.id === billsCablePackage) || provider.packages[0];
+        if (pkg) {
+          setBillsCablePackage(pkg.id);
+          setBillsAmount(String(pkg.price));
+        }
+      }
+    }
+  }, [billsType, billsProvider, billsCablePackage]);
+
+  // Sync default providers on bill type change
+  useEffect(() => {
+    if (billsType === 'cable') {
+      setBillsProvider('DSTV');
+      setIsMeterValidated(false);
+      setBillsCablePackage('dstv-premium');
+    } else if (billsType === 'electricity') {
+      setBillsProvider('AEDC');
+      setIsMeterValidated(false);
+    } else if (billsType === 'betting') {
+      setBillsProvider('SportyBet');
+      setIsMeterValidated(false);
+    }
+  }, [billsType]);
+
+  // Reset validation when critical fields change
+  const handleMeterNumberChange = (val: string) => {
+    setBillsAccountNumber(val);
+    setIsMeterValidated(false);
+    setMeterOwnerName('');
+    setMeterAddress('');
+  };
+
+  const handleProviderChange = (val: string) => {
+    setBillsProvider(val);
+    setIsMeterValidated(false);
+    setMeterOwnerName('');
+    setMeterAddress('');
+    if (billsType === 'cable') {
+      const provider = CABLE_PROVIDERS.find(p => p.id === val);
+      if (provider && provider.packages.length > 0) {
+        setBillsCablePackage(provider.packages[0].id);
+        setBillsAmount(String(provider.packages[0].price));
+      }
+    }
+  };
+
+  const handleMeterTypeChange = (val: 'prepaid' | 'postpaid') => {
+    setBillsMeterType(val);
+    setIsMeterValidated(false);
+    setMeterOwnerName('');
+    setMeterAddress('');
+  };
+
+  // Simulated meter verification
+  const handleValidateMeter = async () => {
+    if (!billsAccountNumber || billsAccountNumber.trim().length < 5) {
+      showToast('Please enter a valid meter number (minimum 5 digits).', 'error');
+      return;
+    }
+    setIsValidatingMeter(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const firstNames = ['Adebayo', 'Chinedu', 'Olumide', 'Fatima', 'Emeka', 'Funmi', 'Babatunde', 'Amina'];
+      const lastNames = ['Alabi', 'Okonkwo', 'Johnson', 'Garba', 'Eze', 'Ogunleye', 'Balogun', 'Bello'];
+      const streets = ['Herbert Macaulay Way', 'Adeniran Ogunsanya St', 'Bode Thomas St', 'Ahmadu Bello Way', 'Allen Avenue', 'Isaac John St'];
+      const areas = ['Yaba, Lagos', 'Surulere, Lagos', 'Ikeja, Lagos', 'Wuse II, Abuja', 'Garki, Abuja', 'Lekki Phase 1, Lagos'];
+      
+      const owner = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+      const address = `${Math.floor(Math.random() * 120) + 1}, ${streets[Math.floor(Math.random() * streets.length)]}, ${areas[Math.floor(Math.random() * areas.length)]}`;
+      
+      setMeterOwnerName(owner);
+      setMeterAddress(address);
+      setIsMeterValidated(true);
+      showToast('Meter details verified successfully!', 'success');
+    } catch (err) {
+      showToast('Meter validation failed. Try again.', 'error');
+    } finally {
+      setIsValidatingMeter(false);
+    }
+  };
 
   // lastTxTime ref to protect against race conditions
   const lastTxTime = useRef<number>(0);
@@ -613,7 +801,7 @@ export default function App() {
   }, [isAuthenticated, currentScreen]);
 
   // Centralized Dynamic Backend State Sync Engine
-  const syncWithBackend = async () => {
+  const syncWithBackend = async (force: boolean = false) => {
     const token = localStorage.getItem('swiftpay_token');
     if (!token) return;
 
@@ -635,7 +823,7 @@ export default function App() {
         const data = await res.json();
         if (data.success && data.user) {
           // Prevent race condition if a transaction succeeded very recently
-          if (Date.now() - lastTxTime.current < 4000) {
+          if (!force && Date.now() - lastTxTime.current < 4000) {
             console.log("[Sync Engine] Skipping user and transaction sync to prevent overwrite of recent transaction state.");
           } else {
             setUser(data.user);
@@ -1238,7 +1426,7 @@ export default function App() {
       setTransactions([data.transaction, ...transactions]);
 
       // Request latest state and balance from backend
-      await syncWithBackend();
+      await syncWithBackend(true);
 
       // Automatically trigger notification update
       const newNotif: NotificationItem = {
@@ -1334,7 +1522,7 @@ export default function App() {
       setTransactions([data.transaction, ...transactions]);
 
       // Request latest state and balance from backend
-      await syncWithBackend();
+      await syncWithBackend(true);
 
       // Trigger notification update
       const newNotif: NotificationItem = {
@@ -1431,7 +1619,7 @@ export default function App() {
       setTransactions([data.transaction, ...transactions]);
 
       // Request latest state and balance from backend
-      await syncWithBackend();
+      await syncWithBackend(true);
 
       // Trigger notification update
       const newNotif: NotificationItem = {
@@ -1529,7 +1717,7 @@ export default function App() {
       setTransactions([data.transaction, ...transactions]);
 
       // Request latest state and balance from backend
-      await syncWithBackend();
+      await syncWithBackend(true);
 
       // Trigger notification update
       const newNotif: NotificationItem = {
@@ -1567,6 +1755,10 @@ export default function App() {
 
     if (!billsAccountNumber || billsAccountNumber.trim().length < 5) {
       showToast('Please enter a valid meter/account/smartcard number (minimum 5 digits).', 'error');
+      return;
+    }
+    if (billsType === 'electricity' && !isMeterValidated) {
+      showToast('Please validate your meter number first before making payment.', 'error');
       return;
     }
     if (!billsAmount || isNaN(Number(billsAmount)) || Number(billsAmount) <= 0) {
@@ -1626,7 +1818,7 @@ export default function App() {
       setTransactions([data.transaction, ...transactions]);
 
       // Request latest state and balance from backend
-      await syncWithBackend();
+      await syncWithBackend(true);
 
       // Trigger notification update
       const newNotif: NotificationItem = {
@@ -1728,7 +1920,7 @@ export default function App() {
   // Trigger floating actions from sheet
   const handleSelectFabAction = (actionId: string) => {
     if (actionId === 'buy-wdv') {
-      setCurrentScreen('buy_wdv');
+      changeScreen('buy_wdv');
     } else if (actionId === 'buy-airtime') {
       setCurrentScreen('buy_airtime');
     } else if (actionId === 'buy-data') {
@@ -2526,7 +2718,7 @@ export default function App() {
                                 if (act.id === 'social') {
                                   setActiveTab('social');
                                 } else if (act.id === 'wdv') {
-                                  setCurrentScreen('buy_wdv');
+                                  changeScreen('buy_wdv');
                                 } else if (act.id === 'guide') {
                                   setIsGuideOpen(true);
                                 } else if (act.id === 'airtime') {
@@ -2945,7 +3137,13 @@ export default function App() {
                   <div className="flex items-center gap-3">
                     <button
                       id="btn-wdv-back"
-                      onClick={() => setCurrentScreen('dashboard')}
+                      onClick={() => {
+                        if (window.history.state && window.history.state.appScreen) {
+                          window.history.back();
+                        } else {
+                          setCurrentScreen(wdvBackScreen);
+                        }
+                      }}
                       className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-500"
                     >
                       <ArrowLeft className="h-4 w-4" />
@@ -3352,7 +3550,7 @@ export default function App() {
                             <button
                               id="btn-goto-buy-wdv-airtime"
                               type="button"
-                              onClick={() => setCurrentScreen('buy_wdv')}
+                              onClick={() => changeScreen('buy_wdv')}
                               className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
                             >
                               Buy WDV Voucher
@@ -3371,7 +3569,7 @@ export default function App() {
                               WDV voucher is required. If you don't have one, tap{' '}
                               <button
                                 type="button"
-                                onClick={() => setCurrentScreen('buy_wdv')}
+                                onClick={() => changeScreen('buy_wdv')}
                                 className="font-extrabold underline text-indigo-600 dark:text-teal-400"
                               >
                                 'Buy WDV Voucher'
@@ -3620,7 +3818,7 @@ export default function App() {
                             <button
                               id="btn-goto-buy-wdv-data"
                               type="button"
-                              onClick={() => setCurrentScreen('buy_wdv')}
+                              onClick={() => changeScreen('buy_wdv')}
                               className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
                             >
                               Buy WDV Voucher
@@ -3639,7 +3837,7 @@ export default function App() {
                               WDV voucher is required. If you don't have one, tap{' '}
                               <button
                                 type="button"
-                                onClick={() => setCurrentScreen('buy_wdv')}
+                                onClick={() => changeScreen('buy_wdv')}
                                 className="font-extrabold underline text-indigo-600 dark:text-teal-400"
                               >
                                 'Buy WDV Voucher'
@@ -3693,7 +3891,13 @@ export default function App() {
                   <div className="flex items-center gap-3">
                     <button
                       id="btn-bills-back"
-                      onClick={() => setCurrentScreen('dashboard')}
+                      onClick={() => {
+                        if (window.history.state && window.history.state.appScreen) {
+                          window.history.back();
+                        } else {
+                          changeScreen('dashboard');
+                        }
+                      }}
                       className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-500"
                     >
                       <ArrowLeft className="h-4 w-4" />
@@ -3717,7 +3921,7 @@ export default function App() {
                   <div className="grid grid-cols-3 gap-2 bg-slate-100/80 dark:bg-slate-900/60 p-1 rounded-xl">
                     <button
                       type="button"
-                      onClick={() => { setBillsType('cable'); setBillsProvider('DSTV'); }}
+                      onClick={() => { setBillsType('cable'); }}
                       className={`py-2 text-[10px] font-bold uppercase rounded-lg transition-all flex flex-col items-center gap-1 ${
                         billsType === 'cable'
                           ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-teal-400 shadow-sm'
@@ -3729,7 +3933,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setBillsType('electricity'); setBillsProvider('AEDC'); }}
+                      onClick={() => { setBillsType('electricity'); }}
                       className={`py-2 text-[10px] font-bold uppercase rounded-lg transition-all flex flex-col items-center gap-1 ${
                         billsType === 'electricity'
                           ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-teal-400 shadow-sm'
@@ -3741,7 +3945,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setBillsType('betting'); setBillsProvider('SportyBet'); }}
+                      onClick={() => { setBillsType('betting'); }}
                       className={`py-2 text-[10px] font-bold uppercase rounded-lg transition-all flex flex-col items-center gap-1 ${
                         billsType === 'betting'
                           ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-teal-400 shadow-sm'
@@ -3760,61 +3964,137 @@ export default function App() {
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Select Provider</label>
                         <select
                           value={billsProvider}
-                          onChange={(e) => setBillsProvider(e.target.value)}
+                          onChange={(e) => handleProviderChange(e.target.value)}
                           className="w-full h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500"
                         >
-                          {billsType === 'cable' && (
-                            <>
-                              <option value="DSTV">DSTV Premium</option>
-                              <option value="GOTV">GOTV Max</option>
-                              <option value="StarTimes">StarTimes Classic</option>
-                            </>
-                          )}
-                          {billsType === 'electricity' && (
-                            <>
-                              <option value="AEDC">Abuja Electricity (AEDC)</option>
-                              <option value="EKEDC">Eko Electricity (EKEDC)</option>
-                              <option value="IKEDC">Ikeja Electricity (IKEDC)</option>
-                              <option value="KAEDCO">Kaduna Electricity (KAEDCO)</option>
-                            </>
-                          )}
-                          {billsType === 'betting' && (
-                            <>
-                              <option value="SportyBet">SportyBet</option>
-                              <option value="Bet9ja">Bet9ja</option>
-                              <option value="1xBet">1xBet Nigeria</option>
-                              <option value="BetKing">BetKing</option>
-                            </>
-                          )}
+                          {billsType === 'cable' && CABLE_PROVIDERS.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                          {billsType === 'electricity' && DISCOS_PROVIDERS.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                          {billsType === 'betting' && BETTING_PROVIDERS.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
                         </select>
                       </div>
 
+                      {/* Cable TV Packages Select dropdown */}
+                      {billsType === 'cable' && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Select Bouquet / Package</label>
+                          <select
+                            value={billsCablePackage}
+                            onChange={(e) => setBillsCablePackage(e.target.value)}
+                            className="w-full h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500"
+                          >
+                            {CABLE_PROVIDERS.find(p => p.id === billsProvider)?.packages.map(pkg => (
+                              <option key={pkg.id} value={pkg.id}>
+                                {pkg.name} ({nairaFormat(pkg.price)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Meter Type Segmented Control for Electricity */}
+                      {billsType === 'electricity' && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Meter Type</label>
+                          <div className="grid grid-cols-2 gap-2 bg-slate-100/50 dark:bg-slate-900/40 p-1 rounded-xl">
+                            <button
+                              type="button"
+                              onClick={() => handleMeterTypeChange('prepaid')}
+                              className={`py-1.5 text-[10px] font-bold uppercase rounded-lg transition-all ${
+                                billsMeterType === 'prepaid'
+                                  ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-teal-400 shadow-sm border border-slate-200/40 dark:border-slate-700/40'
+                                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                              }`}
+                            >
+                              Prepaid
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMeterTypeChange('postpaid')}
+                              className={`py-1.5 text-[10px] font-bold uppercase rounded-lg transition-all ${
+                                billsMeterType === 'postpaid'
+                                  ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-teal-400 shadow-sm border border-slate-200/40 dark:border-slate-700/40'
+                                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                              }`}
+                            >
+                              Postpaid
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Account/Meter/Smartcard Number */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                          {billsType === 'cable' ? 'Smartcard Number' : billsType === 'electricity' ? 'Meter Number' : 'Betting User ID'}
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block flex justify-between">
+                          <span>{billsType === 'cable' ? 'Smartcard / IUC Number' : billsType === 'electricity' ? 'Meter Number' : 'Betting Customer ID'}</span>
+                          {billsType === 'electricity' && isMeterValidated && (
+                            <span className="text-emerald-500 font-bold uppercase tracking-widest text-[8px] flex items-center gap-1 font-sans">
+                              ✓ Verified
+                            </span>
+                          )}
                         </label>
-                        <input
-                          type="text"
-                          value={billsAccountNumber}
-                          onChange={(e) => setBillsAccountNumber(e.target.value.replace(/[^a-zA-Z0-9-]/g, ''))}
-                          placeholder={
-                            billsType === 'cable' ? 'e.g. 1023485764' : billsType === 'electricity' ? 'e.g. 45091827364' : 'e.g. SB-10928374'
-                          }
-                          className="w-full h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500 font-mono"
-                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={billsAccountNumber}
+                            onChange={(e) => handleMeterNumberChange(e.target.value.replace(/[^a-zA-Z0-9-]/g, ''))}
+                            placeholder={
+                              billsType === 'cable' ? 'e.g. 1023485764' : billsType === 'electricity' ? 'e.g. 45091827364' : 'e.g. SB-10928374'
+                            }
+                            className="flex-1 h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500 font-mono"
+                          />
+                          {billsType === 'electricity' && (
+                            <button
+                              type="button"
+                              onClick={handleValidateMeter}
+                              disabled={isValidatingMeter || !billsAccountNumber}
+                              className={`px-4 h-11 rounded-xl text-[10px] font-bold uppercase tracking-wider border border-slate-200 hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-900 transition-all ${
+                                isValidatingMeter ? 'animate-pulse' : ''
+                              }`}
+                            >
+                              {isValidatingMeter ? 'Verifying...' : 'Validate'}
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Simulated Electricity Meter Owner Info */}
+                      {billsType === 'electricity' && isMeterValidated && (
+                        <div className="p-3 bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/10 dark:border-emerald-500/20 rounded-xl space-y-1">
+                          <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span>METER OWNER:</span>
+                            <span className="font-bold text-emerald-500">VERIFIED ✓</span>
+                          </div>
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-100">{meterOwnerName}</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{meterAddress}</div>
+                        </div>
+                      )}
 
                       {/* Amount Input */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Amount (₦)</label>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          {billsType === 'cable' ? 'Automated Amount (Naira)' : 'Amount (₦)'}
+                        </label>
                         <input
                           type="text"
+                          disabled={billsType === 'cable'}
                           value={billsAmount}
                           onChange={(e) => setBillsAmount(e.target.value.replace(/[^0-9]/g, ''))}
-                          placeholder="e.g. 5000"
-                          className="w-full h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500 font-mono"
+                          placeholder={billsType === 'cable' ? 'Auto-filled per bouquet selection' : 'e.g. 5000'}
+                          className={`w-full h-11 px-3 bg-white/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 dark:focus:border-teal-500 font-mono ${
+                            billsType === 'cable' ? 'opacity-80 bg-slate-100 dark:bg-slate-900/60 cursor-not-allowed select-none' : ''
+                          }`}
                         />
+                        {billsType === 'cable' && (
+                          <span className="text-[9px] text-indigo-500 dark:text-teal-400 mt-1 block">
+                            Pricing is automated per package selection. No manual entry required.
+                          </span>
+                        )}
                       </div>
 
                       {/* WDV Voucher Code */}
@@ -3823,7 +4103,7 @@ export default function App() {
                           <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">WDV Voucher Code</label>
                           <button
                             type="button"
-                            onClick={() => setCurrentScreen('buy_wdv')}
+                            onClick={() => changeScreen('buy_wdv')}
                             className="text-[9px] font-bold text-indigo-500 dark:text-teal-400 hover:underline uppercase leading-none"
                           >
                             Buy WDV Voucher
@@ -3853,9 +4133,17 @@ export default function App() {
                       <button
                         id="btn-bills-submit"
                         type="submit"
-                        disabled={!billsAccountNumber || !billsAmount || !billsWdvCode || isSubmitting}
+                        disabled={
+                          !billsAccountNumber || 
+                          !billsAmount || 
+                          !billsWdvCode || 
+                          isSubmitting || 
+                          (billsType === 'electricity' && !isMeterValidated)
+                        }
                         className={`w-full h-12 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 dark:from-teal-600 dark:to-teal-700 text-white text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
-                          (!billsAccountNumber || !billsAmount || !billsWdvCode || isSubmitting) ? 'opacity-50 cursor-not-allowed' : 'shadow-lg hover:shadow-indigo-500/10'
+                          (!billsAccountNumber || !billsAmount || !billsWdvCode || isSubmitting || (billsType === 'electricity' && !isMeterValidated)) 
+                            ? 'opacity-50 cursor-not-allowed' 
+                            : 'shadow-lg hover:shadow-indigo-500/10'
                         }`}
                       >
                         {isSubmitting ? (
@@ -3986,7 +4274,7 @@ export default function App() {
                               <button
                                 id="btn-goto-buy-wdv-transfer"
                                 type="button"
-                                onClick={() => setCurrentScreen('buy_wdv')}
+                                onClick={() => changeScreen('buy_wdv')}
                                 disabled={!transferVerified || isVerifyingAccount}
                                 className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline inline-flex items-center gap-1"
                               >
@@ -4007,7 +4295,7 @@ export default function App() {
                                 WDV voucher is required. If you don't have one, tap{' '}
                                 <button
                                   type="button"
-                                  onClick={() => setCurrentScreen('buy_wdv')}
+                                  onClick={() => changeScreen('buy_wdv')}
                                   className="font-extrabold underline text-indigo-600 dark:text-teal-400"
                                 >
                                   'Buy WDV Voucher'
@@ -4544,7 +4832,7 @@ export default function App() {
                               type="button"
                               onClick={() => {
                                 setIsWithdrawOpen(false);
-                                setCurrentScreen('buy_wdv');
+                                changeScreen('buy_wdv');
                               }}
                               disabled={!withdrawVerified || isVerifyingWithdrawAccount}
                               className="text-[9px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
@@ -4568,7 +4856,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => {
                                   setIsWithdrawOpen(false);
-                                  setCurrentScreen('buy_wdv');
+                                  changeScreen('buy_wdv');
                                 }}
                                 className="font-extrabold underline text-indigo-600 dark:text-teal-400"
                               >
