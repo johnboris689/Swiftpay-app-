@@ -649,20 +649,7 @@ export default function App() {
   }, []);
 
   const getContainerClasses = () => {
-    switch (deviceType) {
-      case 'mobile':
-        return "w-full max-w-md h-screen bg-[#0c0c14] relative flex flex-col overflow-hidden transition-colors duration-300";
-      case 'tablet':
-        return "w-full max-w-3xl h-[92vh] bg-[#0c0c14] md:rounded-[24px] md:border-[6px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-all duration-300";
-      case 'laptop':
-        return "w-full max-w-5xl h-[92vh] bg-[#0c0c14] md:rounded-[32px] md:border-[8px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-all duration-300";
-      case 'desktop':
-        return "w-full max-w-6xl h-[94vh] bg-[#0c0c14] md:rounded-[40px] md:border-[8px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-all duration-300";
-      case 'large':
-        return "w-full max-w-7xl h-[94vh] bg-[#0c0c14] md:rounded-[44px] md:border-[10px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-all duration-300";
-      default:
-        return "w-full max-w-md h-screen md:h-[844px] bg-[#0c0c14] md:rounded-[40px] md:border-[8px] md:border-[#1f1f2e] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative flex flex-col overflow-hidden transition-colors duration-300";
-    }
+    return "w-full min-h-screen h-full min-h-[100dvh] bg-[#0c0c14] relative flex flex-col overflow-hidden transition-colors duration-300";
   };
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -2087,8 +2074,8 @@ export default function App() {
             />
           </div>
         ) : (
-          <div className="p-4 md:p-8 flex-1 flex flex-col">
-            <div className="max-w-7xl w-full mx-auto bg-[#0c0c14]/90 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-xl flex-1 flex flex-col">
+          <div className="w-full flex-1 flex flex-col p-3 sm:p-6 bg-[#0c0c14]">
+            <div className="w-full bg-[#0c0c14] border border-white/10 rounded-2xl p-4 sm:p-6 shadow-2xl backdrop-blur-xl flex-1 flex flex-col">
               <AdminPanel
                 currentUserEmail="admin@swiftpay.com"
                 transactions={transactions}
@@ -2134,53 +2121,9 @@ export default function App() {
           }}
         />
       )}
-      {/* Outer Ambient background framing the phone simulator */}
-      <div className="min-h-screen bg-[#050507] [background:radial-gradient(circle_at_0%_0%,#1e1b4b_0%,#050507_50%),radial-gradient(circle_at_100%_100%,#0d9488_0%,#050507_50%)] text-white flex flex-col items-center justify-center p-4 md:p-6 font-sans overflow-x-hidden md:overflow-visible">
-      
-      {/* Decorative desktop titles (Hidden on mobile) */}
-      <div className="hidden md:flex flex-col items-center mb-6 text-center">
-        <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3.5 py-1.5 rounded-full mb-2">
-          <Sparkles className="h-4.5 w-4.5 text-[#2dd4bf] animate-pulse" />
-          <span className="text-xs font-mono tracking-widest text-[#2dd4bf] uppercase">
-            Active Mode: {deviceType === 'large' ? 'Large Monitor' : deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} ({deviceType === 'mobile' ? 'Full-screen' : 'Adaptive Screen Optimized'})
-          </span>
-        </div>
-        <h1 className="text-3xl font-black font-display tracking-tight bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] bg-clip-text text-transparent">
-          SwiftPay Fintech Wallet
-        </h1>
-        <p className="text-xs text-slate-400 mt-1">Smart Screen Adaptation — Dynamic Column &amp; Grid Matrix</p>
-      </div>
-
-      {/* Container holding mockup and side panels on large screens */}
-      <div className={`flex flex-col ${deviceType !== 'mobile' && deviceType !== 'tablet' ? 'xl:flex-row' : ''} items-center justify-center gap-6 md:gap-8 ${deviceType === 'mobile' ? 'w-full px-0' : 'max-w-full xl:max-w-[1600px] w-full px-4 md:px-8'}`}>
-        
-        {/* Left Side Panel (Hidden on mobile/laptop/desktop dashboards, as they are integrated inside) */}
-        <div className={`hidden ${!isAuthenticated && (deviceType === 'desktop' || deviceType === 'large') ? 'xl:flex' : 'hidden'} flex-col w-[300px] shrink-0 gap-6`}>
-          <GlassCard className="p-6 space-y-4 border border-white/[0.08] bg-white/[0.04]">
-            <div className="inline-block self-start px-2.5 py-1 rounded-lg bg-[#115e59] text-[#2dd4bf] text-[10px] font-black uppercase tracking-wider">
-              SwiftPay Exclusive
-            </div>
-            <h3 className="text-xl font-bold font-display text-white">Buy WDV Voucher</h3>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Redeemable for airtime, data, and direct bank transfers. Enter an amount inside the app to initiate.
-            </p>
-            <div className="bg-black/40 p-4 rounded-xl border border-dashed border-white/10 text-center font-mono text-sm tracking-widest text-[#2dd4bf]">
-              {vouchers.length > 0 ? vouchers[0].code : 'CODE: SP-9982-X2Q'}
-            </div>
-            <button
-              onClick={() => {
-                const code = vouchers.length > 0 ? vouchers[0].code : 'SP-9982-X2Q';
-                navigator.clipboard.writeText(code);
-                showToast('Voucher code copied!', 'success');
-              }}
-              className="w-full py-2.5 bg-[#2dd4bf] hover:bg-[#20b8a4] text-[#050507] font-bold rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer"
-            >
-              Copy Voucher Code
-            </button>
-          </GlassCard>
-        </div>
-
-        {/* Main Core Viewport Simulator */}
+      {/* Full-Screen Edge-to-Edge Container */}
+      <div className="w-full min-h-screen min-h-[100dvh] bg-[#0c0c14] text-white flex flex-col font-sans overflow-x-hidden">
+        {/* Main Core Viewport Container */}
         <div
           id="swiftpay-mobile-container"
           className={getContainerClasses()}
@@ -2776,32 +2719,10 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Right Column: Active Vouchers, Recent Transactions */}
+                    {/* Right Column: Recent Transactions */}
                     <div className={`${deviceType !== 'mobile' ? 'lg:col-span-5 space-y-4 mt-4 lg:mt-0' : 'space-y-4'}`}>
-                      {/* RECENT WDV VOUCHERS LIST */}
-                      {vouchers.length > 0 && (
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <h5 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">My Active WDV Codes</h5>
-                            <span className="text-[10px] font-mono font-bold text-teal-400">
-                              {vouchers.filter(v => v.status === 'unused').length} Unused
-                            </span>
-                          </div>
-                          <div className="space-y-2.5">
-                            {vouchers.map(vouch => (
-                              <WdvVoucher
-                                key={vouch.id}
-                                voucher={vouch}
-                                onRedeemAirtime={(code) => handleQuickRedeemWdv(code, 'airtime')}
-                                onRedeemTransfer={(code) => handleQuickRedeemWdv(code, 'transfer')}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
                       {/* RECENT TRANSACTIONS PREVIEW */}
-                      <div className="pt-1">
+                      <div>
                         <div className="flex items-center justify-between mb-2">
                           <h5 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Recent Transactions</h5>
                           <button
@@ -3362,21 +3283,24 @@ export default function App() {
               {currentScreen === 'wdv_success' && generatedWdv && (
                 <div className="p-5 space-y-5 animate-[fadeIn_0.2s_ease-out]">
                   <div className="text-center pt-4">
-                    <div className="h-14 w-14 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto mb-3">
+                    <div className="h-14 w-14 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto mb-3">
                       <CheckCircle2 className="h-8 w-8" />
                     </div>
-                    <h4 className="text-lg font-bold font-display text-slate-800 dark:text-white">Voucher Generated</h4>
-                    <p className="text-xs text-slate-400 mt-1">Your Withdrawal Voucher (WDV) is active.</p>
+                    <h4 className="text-lg font-bold font-display text-white">Voucher Activated</h4>
+                    <p className="text-xs text-slate-400 mt-1">Your Withdrawal Voucher (WDV) is active and linked to your account.</p>
                   </div>
 
-                  {/* High quality ticket print */}
-                  <WdvVoucher
-                    voucher={generatedWdv}
-                    onRedeemAirtime={(code) => handleQuickRedeemWdv(code, 'airtime')}
-                    onRedeemTransfer={(code) => handleQuickRedeemWdv(code, 'transfer')}
-                  />
+                  {/* System Confirmation Card */}
+                  <div className="bg-[#0a0a14] border border-emerald-500/20 p-5 rounded-2xl text-center space-y-3">
+                    <div className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-wider font-mono">
+                      System Verified & Active
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      Your Withdrawal Voucher (WDV) worth {nairaFormat(generatedWdv.amount)} has been automatically registered and attached to your transaction session.
+                    </p>
+                  </div>
 
-                  <div className="pt-4 space-y-2.5">
+                  <div className="pt-2 space-y-2.5">
                     <button
                       id="btn-wdv-success-home"
                       onClick={() => {
@@ -3384,7 +3308,7 @@ export default function App() {
                         setCurrentScreen('dashboard');
                         setActiveTab('wallet');
                       }}
-                      className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider"
+                      className="w-full py-3.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-slate-950 text-xs font-bold uppercase tracking-wider transition-all"
                     >
                       Return to Dashboard
                     </button>
@@ -5233,54 +5157,7 @@ export default function App() {
         )}
 
         </div>
-
-        {/* Right Side Panel (Hidden on mobile/laptop/desktop dashboards, as they are integrated inside) */}
-        <div className={`hidden ${!isAuthenticated && (deviceType === 'desktop' || deviceType === 'large') ? 'xl:flex' : 'hidden'} flex-col w-[300px] shrink-0 gap-6`}>
-          <GlassCard className="p-6 space-y-4 border border-white/[0.08] bg-white/[0.04]">
-            <h3 className="text-xl font-bold font-display text-white border-b border-white/5 pb-2">
-              Bank Transfer
-            </h3>
-            <div className="flex flex-col gap-4">
-              <div>
-                <div className="text-[10px] text-slate-400 uppercase font-mono tracking-wider mb-1">ACCOUNT NUMBER</div>
-                <div className="text-base font-bold text-white flex items-center justify-between border-b border-white/10 pb-1.5 font-mono">
-                  <span>8960723295</span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText('8960723295');
-                      showToast('Account number copied!', 'success');
-                    }}
-                    className="text-[#2dd4bf] text-xs font-semibold hover:underline cursor-pointer animate-pulse"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] text-slate-400 uppercase font-mono tracking-wider mb-1">BANK NAME</div>
-                <div className="text-sm font-semibold text-white font-mono">PalmPay</div>
-              </div>
-
-              <div>
-                <div className="text-[10px] text-slate-400 uppercase font-mono tracking-wider mb-1">ACCOUNT NAME</div>
-                <div className="text-sm font-semibold text-white font-mono">Pwamunadi Ishaku</div>
-              </div>
-
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-[11px] text-amber-300 leading-relaxed font-sans">
-                Please use only supported banks for instant confirmation. Keep your transfer receipt handy.
-              </div>
-            </div>
-          </GlassCard>
-        </div>
-
       </div>
-
-      {/* Footer credits info (Hidden on mobile) */}
-      <div className="hidden md:block text-center mt-6 text-[10px] text-slate-500">
-        SwiftPay © 2026. All transaction logs and WDV keys are fully persisted in secure database.
-      </div>
-    </div>
     </>
   );
 }
