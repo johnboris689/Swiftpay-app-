@@ -293,10 +293,13 @@ export default function App() {
   const [resetStep, setResetStep] = useState<'request' | 'verify' | 'new_password'>('request');
   const [simulatedResetInfo, setSimulatedResetInfo] = useState<{ otp: string; token: string } | null>(null);
 
-  // Change Password form states (inside settings)
+  // Change Password & Security form states (inside settings)
   const [changeCurrentPassword, setChangeCurrentPassword] = useState('');
   const [changeNewPassword, setChangeNewPassword] = useState('');
   const [isChangingPasswordOpen, setIsChangingPasswordOpen] = useState(false);
+  const [isChangingPinOpen, setIsChangingPinOpen] = useState(false);
+  const [changeNewPinInput, setChangeNewPinInput] = useState('');
+  const [isActivatingBiometric, setIsActivatingBiometric] = useState(false);
 
   // PIN Setup or Unlock States
   const [pinEntry, setPinEntry] = useState('');
@@ -3136,6 +3139,156 @@ export default function App() {
                             </button>
                           ))}
                         </div>
+                      </div>
+
+                      {/* Biometric & Security Management Section */}
+                      <div className="p-4 space-y-3 border-t border-slate-150 dark:border-slate-800/50">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20">
+                              <Fingerprint className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold text-slate-800 dark:text-white block">Biometric Authentication</span>
+                              <span className="text-[10px] text-slate-400 block">
+                                {user?.biometricEnabled ? 'Passkey / Biometric is Active' : 'Fingerprint or Face ID not registered'}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            {user?.biometricEnabled ? (
+                              <button
+                                id="btn-disable-biometric"
+                                type="button"
+                                onClick={async () => {
+                                  const token = localStorage.getItem('swiftpay_token');
+                                  if (!token) return;
+                                  try {
+                                    const res = await fetch('/api/auth/webauthn/disable', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${token}`
+                                      }
+                                    });
+                                    const data = await res.json();
+                                    if (res.ok && data.user) {
+                                      setUser(data.user);
+                                      showToast('Biometric login turned off', 'info');
+                                    }
+                                  } catch (err) {
+                                    showToast('Failed to disable biometric login', 'error');
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-[10px] font-bold transition-all cursor-pointer"
+                              >
+                                Disable
+                              </button>
+                            ) : (
+                              <button
+                                id="btn-enable-biometric"
+                                type="button"
+                                disabled={isActivatingBiometric}
+                                onClick={async () => {
+                                  const token = localStorage.getItem('swiftpay_token');
+                                  if (!token) {
+                                    showToast('Please log in again to register biometric.', 'error');
+                                    return;
+                                  }
+                                  setIsActivatingBiometric(true);
+                                  showToast('Opening device biometric prompt...', 'info');
+                                  const result = await registerDeviceBiometric(token);
+                                  setIsActivatingBiometric(false);
+                                  if (result.success && result.user) {
+                                    setUser(result.user);
+                                    showToast(result.message, 'success');
+                                  } else {
+                                    showToast(result.message || 'Biometric activation failed', 'error');
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-gradient-to-r from-teal-500 to-indigo-600 text-white rounded-xl text-[10px] font-bold shadow-md hover:brightness-110 transition-all cursor-pointer flex items-center gap-1"
+                              >
+                                {isActivatingBiometric ? 'Activating...' : 'Enable Fingerprint'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Security PIN Collapsible Section */}
+                      <div className="p-4 space-y-2 border-t border-slate-150 dark:border-slate-800/50">
+                        <button
+                          id="btn-toggle-change-pin"
+                          type="button"
+                          onClick={() => setIsChangingPinOpen(!isChangingPinOpen)}
+                          className="w-full py-2.5 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-900 border border-slate-150 dark:border-slate-800/80 text-xs font-bold rounded-xl flex items-center justify-between px-3 text-slate-700 dark:text-slate-300 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="h-4 w-4 text-indigo-400" />
+                            <span>{user?.pinCreated ? 'Update Security PIN' : 'Setup Security PIN'}</span>
+                          </div>
+                          <ChevronRight className={`h-4 w-4 transition-transform ${isChangingPinOpen ? 'rotate-90' : ''}`} />
+                        </button>
+
+                        {isChangingPinOpen && (
+                          <form
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              if (!changeNewPinInput || (changeNewPinInput.length !== 4 && changeNewPinInput.length !== 6)) {
+                                showToast('PIN must be a 4-digit or 6-digit numeric code.', 'error');
+                                return;
+                              }
+                              const token = localStorage.getItem('swiftpay_token');
+                              if (!token) {
+                                showToast('Session expired. Please log in again.', 'error');
+                                return;
+                              }
+                              try {
+                                const res = await fetch('/api/auth/pin/setup', {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                  },
+                                  body: JSON.stringify({ pinCode: changeNewPinInput })
+                                });
+                                const data = await res.json();
+                                if (res.ok && data.user) {
+                                  setUser(data.user);
+                                  showToast('Wallet PIN configured securely!', 'success');
+                                  setChangeNewPinInput('');
+                                  setIsChangingPinOpen(false);
+                                } else {
+                                  showToast(data.error || 'Failed to configure PIN.', 'error');
+                                }
+                              } catch (err) {
+                                showToast('Network error during PIN update.', 'error');
+                              }
+                            }}
+                            className="space-y-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-150 dark:border-slate-850/60 mt-2"
+                          >
+                            <div>
+                              <label className="text-[9px] font-mono text-slate-400 block mb-1">New 4 or 6-Digit PIN</label>
+                              <input
+                                id="input-change-new-pin"
+                                type="password"
+                                maxLength={6}
+                                placeholder="••••"
+                                required
+                                value={changeNewPinInput}
+                                onChange={(e) => setChangeNewPinInput(e.target.value.replace(/\D/g, ''))}
+                                className="w-full text-center tracking-[0.5em] font-mono text-sm font-extrabold bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-teal-400 focus:outline-none"
+                              />
+                            </div>
+                            <button
+                              id="btn-submit-change-pin"
+                              type="submit"
+                              className="w-full py-2 bg-gradient-to-r from-indigo-600 to-teal-500 hover:from-indigo-700 hover:to-teal-600 text-white rounded-lg text-xs font-bold cursor-pointer"
+                            >
+                              Save Security PIN
+                            </button>
+                          </form>
+                        )}
                       </div>
 
                       {/* Change Password Collapsible Section (Point 1, Point 3) */}

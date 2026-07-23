@@ -1029,6 +1029,37 @@ app.post('/api/auth/webauthn/register-verify', authenticateToken, (req: any, res
   });
 });
 
+// 2b. WebAuthn Disable (Protected)
+app.post('/api/auth/webauthn/disable', authenticateToken, (req: any, res) => {
+  const db = readDb();
+  const user = db.users[req.userIndex];
+  if (!user) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
+
+  user.biometricEnabled = false;
+  delete user.webAuthnCredential;
+
+  user.notifications = user.notifications || [];
+  user.notifications.unshift({
+    id: `notif-${Date.now()}`,
+    title: 'Biometric Security Disabled',
+    body: 'Fingerprint / Face ID biometric authentication has been turned off.',
+    date: new Date().toISOString(),
+    unread: true
+  });
+
+  writeDb(db);
+  logDiagnostic('INFO', 'Biometric credential disabled', { email: user.email });
+
+  const { passwordHash, ...safeUser } = user as any;
+  res.json({
+    success: true,
+    message: 'Biometric authentication turned off.',
+    user: safeUser
+  });
+});
+
 // 3. WebAuthn Login Options
 app.post('/api/auth/webauthn/login-options', (req, res) => {
   const { email } = req.body;
