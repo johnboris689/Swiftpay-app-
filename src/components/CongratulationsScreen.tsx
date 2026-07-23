@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Check, Sparkles, ArrowRight, ArrowUpRight, Smartphone, Wifi, Zap, ShieldCheck, Gift } from 'lucide-react';
+import { Check, Sparkles, ArrowRight, ArrowUpRight, Smartphone, Wifi, Zap, ShieldCheck, Gift, Fingerprint, CheckCircle2 } from 'lucide-react';
+import { registerDeviceBiometric } from '../lib/webauthn';
 
 interface CongratulationsScreenProps {
   userEmail: string;
@@ -9,7 +10,34 @@ interface CongratulationsScreenProps {
 
 export default function CongratulationsScreen({ userEmail, onContinue }: CongratulationsScreenProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBioLoading, setIsBioLoading] = useState(false);
+  const [bioRegistered, setBioRegistered] = useState(false);
+  const [bioError, setBioError] = useState('');
   const [sparkles, setSparkles] = useState<{ id: number; left: string; top: string; scale: number; delay: number }[]>([]);
+
+  const handleRegisterBiometric = async () => {
+    setIsBioLoading(true);
+    setBioError('');
+    const token = localStorage.getItem('swiftpay_token');
+    if (!token) {
+      setBioError('Session invalid. Please continue to login.');
+      setIsBioLoading(false);
+      return;
+    }
+
+    try {
+      const res = await registerDeviceBiometric(token);
+      if (res.success) {
+        setBioRegistered(true);
+      } else {
+        setBioError(res.message || 'Biometric registration failed.');
+      }
+    } catch (err: any) {
+      setBioError(err.message || 'Biometric registration error.');
+    } finally {
+      setIsBioLoading(false);
+    }
+  };
   const [confetti, setConfetti] = useState<{ id: number; left: string; delay: number; color: string; duration: number }[]>([]);
   const [particles, setParticles] = useState<{ id: number; left: string; top: string; delay: number; size: number }[]>([]);
 
@@ -276,6 +304,41 @@ export default function CongratulationsScreen({ userEmail, onContinue }: Congrat
           <p className="text-[11px] text-slate-300">
             Your welcome reward has been successfully activated. You can access up to ₦200,000 every 24 hours for three consecutive days after completing the required verification process.
           </p>
+        </div>
+
+        {/* Biometric Fingerprint / Passkey Setup Card */}
+        <div className="w-full bg-slate-900/80 border border-teal-500/30 rounded-2xl p-3.5 text-left space-y-2.5 backdrop-blur-md shadow-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-teal-500/15 text-teal-400 border border-teal-500/20">
+                <Fingerprint className="w-5 h-5 stroke-[2]" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-white">Enable Fingerprint / Face ID</h3>
+                <p className="text-[10px] text-slate-400">Log in securely with native device biometrics</p>
+              </div>
+            </div>
+          </div>
+
+          {bioRegistered ? (
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-emerald-400 text-xs font-bold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Fingerprint / Passkey Registered & Active!</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleRegisterBiometric}
+              disabled={isBioLoading}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-teal-500 via-indigo-600 to-teal-500 hover:from-teal-400 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <Fingerprint className="w-4 h-4" />
+              {isBioLoading ? 'Opening Device Biometric Prompt...' : 'Register Fingerprint'}
+            </button>
+          )}
+          {bioError && (
+            <p className="text-[10px] text-rose-400 font-medium">{bioError}</p>
+          )}
         </div>
 
         {/* Feature Preview Grid (2x2) */}

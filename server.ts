@@ -124,6 +124,8 @@ interface UserState {
     publicKey?: string;
     counter?: number;
     transports?: string[];
+    deviceName?: string;
+    createdAt?: string;
   };
   phone?: string;
   profilePic?: string;
@@ -1006,7 +1008,13 @@ app.post('/api/auth/webauthn/register-verify', authenticateToken, (req: any, res
   user.webAuthnCredential = {
     id: credentialId || `cred-${Date.now()}`,
     rawId: rawId || credentialId,
-    type: 'public-key'
+    type: 'public-key',
+    deviceName: (req.headers['user-agent'] && req.headers['user-agent'].includes('Android'))
+      ? 'Android Biometric Authenticator (Fingerprint/Passkey)'
+      : (req.headers['user-agent'] && req.headers['user-agent'].includes('iPhone'))
+      ? 'Apple Device Authenticator (Face ID / Touch ID)'
+      : 'Native Platform Authenticator (Fingerprint/Face ID/Windows Hello)',
+    createdAt: new Date().toISOString()
   };
 
   user.notifications = user.notifications || [];
@@ -1063,14 +1071,25 @@ app.post('/api/auth/webauthn/disable', authenticateToken, (req: any, res) => {
 // 3. WebAuthn Login Options
 app.post('/api/auth/webauthn/login-options', (req, res) => {
   const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Please enter your registered email address for biometric login.' });
+  }
+
   const db = readDb();
-  
+  const user = db.users.find((u: any) => u.email.toLowerCase() === email.trim().toLowerCase());
+  if (!user) {
+    return res.status(404).json({ error: 'User account not found.' });
+  }
+
+  if (!user.biometricEnabled) {
+    return res.status(400).json({
+      error: 'No fingerprint or passkey registered for this account. Please login with password first and enable biometric login.'
+    });
+  }
+
   let allowCredentials: any[] = [];
-  if (email) {
-    const user = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
-    if (user && user.webAuthnCredential && user.webAuthnCredential.id) {
-      allowCredentials.push({ id: user.webAuthnCredential.id, type: 'public-key' });
-    }
+  if (user.webAuthnCredential && user.webAuthnCredential.id) {
+    allowCredentials.push({ id: user.webAuthnCredential.id, type: 'public-key' });
   }
 
   const challenge = crypto.randomBytes(32).toString('base64url');

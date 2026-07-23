@@ -3143,19 +3143,34 @@ export default function App() {
 
                       {/* Biometric & Security Management Section */}
                       <div className="p-4 space-y-3 border-t border-slate-150 dark:border-slate-800/50">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5">
+                            <div className="p-2 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20 shrink-0 mt-0.5">
                               <Fingerprint className="h-5 w-5" />
                             </div>
-                            <div>
-                              <span className="text-xs font-bold text-slate-800 dark:text-white block">Biometric Authentication</span>
-                              <span className="text-[10px] text-slate-400 block">
-                                {user?.biometricEnabled ? 'Passkey / Biometric is Active' : 'Fingerprint or Face ID not registered'}
-                              </span>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-800 dark:text-white">Biometric Passkey Login</span>
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                                  user?.biometricEnabled
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                    : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                                }`}>
+                                  {user?.biometricEnabled ? 'ENABLED' : 'DISABLED'}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400">
+                                {user?.biometricEnabled ? 'Native device biometric passkey registered' : 'No biometric credential registered'}
+                              </p>
+                              {user?.biometricEnabled && (
+                                <div className="text-[9.5px] font-mono text-slate-400 space-y-0.5 pt-1 border-t border-slate-200/10">
+                                  <div><span className="text-slate-500">Device:</span> {user.webAuthnCredential?.deviceName || 'Platform Authenticator'}</div>
+                                  <div><span className="text-slate-500">Date Added:</span> {user.biometricRegisteredAt ? new Date(user.biometricRegisteredAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Recently Added'}</div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div>
+                          <div className="shrink-0">
                             {user?.biometricEnabled ? (
                               <button
                                 id="btn-disable-biometric"
@@ -3174,7 +3189,7 @@ export default function App() {
                                     const data = await res.json();
                                     if (res.ok && data.user) {
                                       setUser(data.user);
-                                      showToast('Biometric login turned off', 'info');
+                                      showToast('Biometric security removed from account', 'info');
                                     }
                                   } catch (err) {
                                     showToast('Failed to disable biometric login', 'error');
@@ -3182,7 +3197,7 @@ export default function App() {
                                 }}
                                 className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-[10px] font-bold transition-all cursor-pointer"
                               >
-                                Disable
+                                Remove Biometric
                               </button>
                             ) : (
                               <button
@@ -3208,7 +3223,7 @@ export default function App() {
                                 }}
                                 className="px-3 py-1.5 bg-gradient-to-r from-teal-500 to-indigo-600 text-white rounded-xl text-[10px] font-bold shadow-md hover:brightness-110 transition-all cursor-pointer flex items-center gap-1"
                               >
-                                {isActivatingBiometric ? 'Activating...' : 'Enable Fingerprint'}
+                                {isActivatingBiometric ? 'Activating...' : 'Register Fingerprint'}
                               </button>
                             )}
                           </div>
