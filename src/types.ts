@@ -7,6 +7,14 @@ export interface User {
   pinCreated: boolean;
   pinCode?: string;
   biometricEnabled: boolean;
+  biometricRegisteredAt?: string;
+  lastBiometricLogin?: string;
+  lastLoginMethod?: 'password' | 'pin' | 'biometric';
+  webAuthnCredential?: {
+    id: string;
+    rawId?: string;
+    type?: string;
+  };
   phone?: string;
   profilePic?: string;
   isSuspended?: boolean;

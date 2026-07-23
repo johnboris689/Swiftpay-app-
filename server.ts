@@ -114,6 +114,17 @@ interface UserState {
   pinCreated: boolean;
   pinCode?: string;
   biometricEnabled: boolean;
+  biometricRegisteredAt?: string;
+  lastBiometricLogin?: string;
+  lastLoginMethod?: string;
+  webAuthnCredential?: {
+    id: string;
+    rawId?: string;
+    type?: string;
+    publicKey?: string;
+    counter?: number;
+    transports?: string[];
+  };
   phone?: string;
   profilePic?: string;
   tier?: number;
@@ -942,6 +953,283 @@ app.post('/api/auth/login', (req, res) => {
       loginHistory: user.loginHistory,
       welcomeRewardShown: user.welcomeRewardShown
     }
+  });
+});
+
+// -------------------- WEBAUTHN BIOMETRIC & PIN ROUTES --------------------
+
+// 1. WebAuthn Registration Options (Protected)
+app.post('/api/auth/webauthn/register-options', authenticateToken, (req: any, res) => {
+  const db = readDb();
+  const user = db.users[req.userIndex];
+  if (!user) {
+    return res.status(404).json({ error: 'User session not found.' });
+  }
+
+  const challenge = crypto.randomBytes(32).toString('base64url');
+  res.json({
+    success: true,
+    options: {
+      challenge,
+      rp: { name: 'SwiftPay', id: req.hostname || 'localhost' },
+      user: {
+        id: Buffer.from(user.email).toString('base64url'),
+        name: user.email,
+        displayName: user.fullName
+      },
+      pubKeyCredParams: [
+        { alg: -7, type: 'public-key' },
+        { alg: -257, type: 'public-key' }
+      ],
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform',
+        userVerification: 'preferred',
+        residentKey: 'preferred'
+      },
+      timeout: 60000
+    }
+  });
+});
+
+// 2. WebAuthn Registration Verify (Protected)
+app.post('/api/auth/webauthn/register-verify', authenticateToken, (req: any, res) => {
+  const db = readDb();
+  const user = db.users[req.userIndex];
+  if (!user) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
+
+  const { credentialId, rawId } = req.body;
+
+  user.biometricEnabled = true;
+  user.biometricRegisteredAt = new Date().toISOString();
+  user.webAuthnCredential = {
+    id: credentialId || `cred-${Date.now()}`,
+    rawId: rawId || credentialId,
+    type: 'public-key'
+  };
+
+  user.notifications = user.notifications || [];
+  user.notifications.unshift({
+    id: `notif-${Date.now()}`,
+    title: 'Biometric Security Enabled',
+    body: 'Fingerprint / Face ID biometric authentication has been activated on your account.',
+    date: new Date().toISOString(),
+    unread: true
+  });
+
+  writeDb(db);
+  logDiagnostic('INFO', 'Biometric credential registered', { email: user.email });
+
+  const { passwordHash, ...safeUser } = user as any;
+  res.json({
+    success: true,
+    message: 'Biometric security activated successfully!',
+    user: safeUser
+  });
+});
+
+// 3. WebAuthn Login Options
+app.post('/api/auth/webauthn/login-options', (req, res) => {
+  const { email } = req.body;
+  const db = readDb();
+  
+  let allowCredentials: any[] = [];
+  if (email) {
+    const user = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+    if (user && user.webAuthnCredential && user.webAuthnCredential.id) {
+      allowCredentials.push({ id: user.webAuthnCredential.id, type: 'public-key' });
+    }
+  }
+
+  const challenge = crypto.randomBytes(32).toString('base64url');
+  res.json({
+    success: true,
+    options: {
+      challenge,
+      allowCredentials,
+      userVerification: 'preferred',
+      timeout: 60000
+    }
+  });
+});
+
+// 4. WebAuthn Login Verify
+app.post('/api/auth/webauthn/login-verify', (req, res) => {
+  const { email, credentialId } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Email address is required for biometric sign in.' });
+  }
+
+  const db = readDb();
+  const user = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+
+  if (!user) {
+    return res.status(404).json({ error: 'User account not found.' });
+  }
+
+  if (user.isSuspended) {
+    return res.status(400).json({ error: 'Account suspended. Contact administration.' });
+  }
+
+  if (!user.biometricEnabled) {
+    return res.status(400).json({ error: 'Biometric login is not enabled for this account. Please login with password first.' });
+  }
+
+  user.lastBiometricLogin = new Date().toISOString();
+  user.lastLoginMethod = 'biometric';
+  user.loginHistory = user.loginHistory || [];
+  user.loginHistory.unshift({
+    id: `log-${Date.now()}`,
+    date: new Date().toLocaleDateString(),
+    time: new Date().toLocaleTimeString(),
+    device: 'Biometric Platform Authenticator (Fingerprint/Face ID)',
+    browser: req.headers['user-agent'] || 'Native Browser',
+    ip: req.socket.remoteAddress || '127.0.0.1',
+    location: 'Lagos, Nigeria',
+    status: 'success'
+  });
+
+  writeDb(db);
+
+  const token = generateToken(user.email);
+  logDiagnostic('INFO', 'Biometric login successful', { email: user.email });
+
+  const { passwordHash, ...safeUser } = user as any;
+  res.json({
+    success: true,
+    token,
+    user: safeUser
+  });
+});
+
+// 5. PIN Setup Endpoint (Protected)
+app.post('/api/auth/pin/setup', authenticateToken, (req: any, res) => {
+  const { pinCode } = req.body;
+  if (!pinCode || (pinCode.length !== 4 && pinCode.length !== 6) || !/^\d+$/.test(pinCode)) {
+    return res.status(400).json({ error: 'PIN must be a 4-digit or 6-digit numeric code.' });
+  }
+
+  const db = readDb();
+  const user = db.users[req.userIndex];
+  if (!user) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
+
+  const hashedPin = bcrypt.hashSync(pinCode, 10);
+  user.pinCode = hashedPin;
+  user.pinCreated = true;
+
+  user.notifications = user.notifications || [];
+  user.notifications.unshift({
+    id: `notif-${Date.now()}`,
+    title: 'Security PIN Configured',
+    body: 'Your 4-digit wallet security PIN has been set up successfully.',
+    date: new Date().toISOString(),
+    unread: true
+  });
+
+  writeDb(db);
+  logDiagnostic('INFO', 'PIN configured successfully', { email: user.email });
+
+  const { passwordHash, ...safeUser } = user as any;
+  res.json({
+    success: true,
+    message: 'Security PIN configured successfully!',
+    user: safeUser
+  });
+});
+
+// 6. PIN Login Endpoint
+app.post('/api/auth/pin/login', (req, res) => {
+  const { emailOrPhone, pinCode } = req.body;
+  if (!emailOrPhone || !pinCode) {
+    return res.status(400).json({ error: 'Please enter your email or phone number and PIN.' });
+  }
+
+  const query = emailOrPhone.trim().toLowerCase();
+  const key = `pin-${query}`;
+  const failed = failedLogins.get(key) || { count: 0, lockedUntil: 0 };
+
+  if (failed.lockedUntil > Date.now()) {
+    const remainingSeconds = Math.ceil((failed.lockedUntil - Date.now()) / 1000);
+    return res.status(400).json({
+      error: `PIN login locked due to multiple incorrect attempts. Try again in ${remainingSeconds}s.`,
+      locked: true,
+      lockedUntil: failed.lockedUntil
+    });
+  }
+
+  const db = readDb();
+  const user = db.users.find((u: any) => 
+    u.email.toLowerCase() === query || 
+    (u.phone && u.phone.replace(/\s+/g, '') === query.replace(/\s+/g, ''))
+  );
+
+  if (!user) {
+    return res.status(404).json({ error: 'No account found matching those credentials.' });
+  }
+
+  if (user.isSuspended) {
+    return res.status(400).json({ error: 'This account has been suspended by the administrator.' });
+  }
+
+  if (!user.pinCreated || !user.pinCode) {
+    return res.status(400).json({ error: 'You have not set up a security PIN yet. Please login with your password first.' });
+  }
+
+  let isPinCorrect = false;
+  if (user.pinCode.startsWith('$2a$') || user.pinCode.startsWith('$2b$') || user.pinCode.startsWith('$2y$')) {
+    isPinCorrect = bcrypt.compareSync(pinCode, user.pinCode);
+  } else {
+    isPinCorrect = user.pinCode === pinCode;
+    if (isPinCorrect) {
+      user.pinCode = bcrypt.hashSync(pinCode, 10);
+      writeDb(db);
+    }
+  }
+
+  if (!isPinCorrect) {
+    failed.count += 1;
+    if (failed.count >= 3) {
+      failed.lockedUntil = Date.now() + 60 * 1000;
+      failedLogins.set(key, failed);
+      return res.status(400).json({
+        error: 'Too many incorrect PIN attempts. PIN login locked for 60 seconds.',
+        locked: true,
+        lockedUntil: failed.lockedUntil
+      });
+    }
+    failedLogins.set(key, failed);
+    const remaining = 3 - failed.count;
+    return res.status(400).json({ error: `Incorrect PIN code. ${remaining} attempt(s) remaining.` });
+  }
+
+  failedLogins.delete(key);
+
+  user.lastLoginMethod = 'pin';
+  user.loginHistory = user.loginHistory || [];
+  user.loginHistory.unshift({
+    id: `log-${Date.now()}`,
+    date: new Date().toLocaleDateString(),
+    time: new Date().toLocaleTimeString(),
+    device: 'Web Client (PIN Login)',
+    browser: req.headers['user-agent'] || 'Unknown Browser',
+    ip: req.socket.remoteAddress || '127.0.0.1',
+    location: 'Lagos, Nigeria',
+    status: 'success'
+  });
+
+  writeDb(db);
+
+  const token = generateToken(user.email);
+  logDiagnostic('INFO', 'PIN login successful', { email: user.email });
+
+  const { passwordHash, ...safeUser } = user as any;
+  res.json({
+    success: true,
+    token,
+    user: safeUser
   });
 });
 

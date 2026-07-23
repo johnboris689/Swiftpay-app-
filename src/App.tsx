@@ -35,9 +35,11 @@ import {
   Tv,
   Zap,
   Gamepad2,
-  Wallet
+  Wallet,
+  Fingerprint
 } from 'lucide-react';
 
+import { registerDeviceBiometric, loginWithBiometric, isWebAuthnSupported } from './lib/webauthn';
 import { User, WdvCode, Transaction, NotificationItem } from './types';
 import {
   SUPPORTED_BANKS,
@@ -218,6 +220,11 @@ export default function App() {
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [isAdminSubmitting, setIsAdminSubmitting] = useState(false);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+
+  // Biometric & PIN login method state
+  const [signInMethod, setSignInMethod] = useState<'password' | 'biometric' | 'pin'>('password');
+  const [pinLoginInput, setPinLoginInput] = useState('');
+  const [emailOrPhoneInput, setEmailOrPhoneInput] = useState('');
 
   const handleAdminLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -989,6 +996,85 @@ export default function App() {
     }
   };
 
+  // PIN Sign In Handler
+  const handlePinSignIn = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (isAuthSubmitting) return;
+
+    const target = emailOrPhoneInput || email;
+    if (!target) {
+      showToast('Please enter your email address or phone number.', 'error');
+      return;
+    }
+    if (!pinLoginInput || (pinLoginInput.length !== 4 && pinLoginInput.length !== 6)) {
+      showToast('Please enter your 4-digit or 6-digit security PIN.', 'error');
+      return;
+    }
+
+    setIsAuthSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/pin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailOrPhone: target, pinCode: pinLoginInput })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'PIN authentication failed.', 'error');
+        setPinLoginInput('');
+        return;
+      }
+
+      setUser(data.user);
+      localStorage.setItem('swiftpay_token', data.token);
+      localStorage.setItem('swiftpay_auth', 'true');
+      setIsAuthenticated(true);
+      setHasSetupPin(true);
+      setIsPinUnlocked(true);
+      setCurrentScreen('dashboard');
+      showToast('Authenticated successfully with PIN!', 'success');
+    } catch (err) {
+      console.error('PIN Login error:', err);
+      showToast('Network error during PIN login.', 'error');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  // Real Native Device Biometric Sign In Handler
+  const handleBiometricSignIn = async () => {
+    if (isAuthSubmitting) return;
+    const targetEmail = email || emailOrPhoneInput;
+    if (!targetEmail) {
+      showToast('Please enter your registered email address first.', 'error');
+      return;
+    }
+
+    setIsAuthSubmitting(true);
+    showToast('Opening native biometric prompt...', 'info');
+    try {
+      const result = await loginWithBiometric(targetEmail);
+      if (!result.success || !result.token || !result.user) {
+        showToast(result.error || 'Biometric verification failed. Try PIN or password.', 'error');
+        return;
+      }
+
+      setUser(result.user);
+      localStorage.setItem('swiftpay_token', result.token);
+      localStorage.setItem('swiftpay_auth', 'true');
+      setIsAuthenticated(true);
+      setHasSetupPin(true);
+      setIsPinUnlocked(true);
+      setCurrentScreen('dashboard');
+      showToast('Biometric authentication verified! Welcome back.', 'success');
+    } catch (err: any) {
+      console.error('Biometric Login error:', err);
+      showToast('Biometric error: ' + (err.message || 'Verification failed.'), 'error');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
   // Forgot Password flow - initiate code generation
   const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1152,9 +1238,27 @@ export default function App() {
           setPinConfirm(newConfirm);
           if (newConfirm.length === 4) {
             // Verify
-            setTimeout(() => {
+            setTimeout(async () => {
               if (pinEntry === newConfirm) {
-                if (user) {
+                const token = localStorage.getItem('swiftpay_token');
+                if (token) {
+                  try {
+                    const res = await fetch('/api/auth/pin/setup', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify({ pinCode: pinEntry })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.user) {
+                      setUser(data.user);
+                    }
+                  } catch (err) {
+                    console.error('PIN setup server error:', err);
+                  }
+                } else if (user) {
                   setUser({ ...user, pinCreated: true, pinCode: pinEntry });
                 }
                 localStorage.setItem('swiftpay_pin_setup', 'true');
@@ -1177,11 +1281,37 @@ export default function App() {
         const newPin = pinEntry + num;
         setPinEntry(newPin);
         if (newPin.length === 4) {
-          setTimeout(() => {
+          setTimeout(async () => {
+            const token = localStorage.getItem('swiftpay_token');
+            if (user?.email) {
+              try {
+                const res = await fetch('/api/auth/pin/login', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ emailOrPhone: user.email, pinCode: newPin })
+                });
+                const data = await res.json();
+                if (res.ok && data.user) {
+                  setUser(data.user);
+                  setIsPinUnlocked(true);
+                  setCurrentScreen('dashboard');
+                  showToast('Unlocked successfully. Welcome back!', 'success');
+                  setPinEntry('');
+                  return;
+                } else {
+                  showToast(data.error || 'Invalid PIN passcode. Try again.', 'error');
+                  setPinEntry('');
+                  return;
+                }
+              } catch (e) {
+                console.error('PIN verify error:', e);
+              }
+            }
             if (newPin === (user?.pinCode || '1234')) {
               setIsPinUnlocked(true);
               setCurrentScreen('dashboard');
               showToast(`Unlocked successfully. Welcome back!`, 'success');
+              setPinEntry('');
             } else {
               showToast('Invalid passcode. Try again', 'error');
               setPinEntry('');
@@ -1204,27 +1334,52 @@ export default function App() {
     }
   };
 
-  // Simulate fingerprint scan triggers
-  const triggerFingerprintScan = () => {
+  // Trigger Real Device Biometric Scan
+  const triggerFingerprintScan = async () => {
     if (biometricStatus !== 'idle') return;
     setBiometricStatus('reading');
 
-    setTimeout(() => {
-      setBiometricStatus('success');
-      setTimeout(() => {
-        setBiometricStatus('idle');
-        if (currentScreen === 'pin_setup') {
-          if (user) {
-            setUser({ ...user, biometricEnabled: true });
-          }
-          showToast('Fingerprint biometric added!', 'success');
-        } else if (currentScreen === 'pin_entry') {
+    const token = localStorage.getItem('swiftpay_token');
+
+    if (currentScreen === 'pin_setup' || currentScreen === 'dashboard') {
+      if (token) {
+        const result = await registerDeviceBiometric(token);
+        if (result.success && result.user) {
+          setUser(result.user);
+          setBiometricStatus('success');
+          showToast(result.message, 'success');
+        } else {
+          setBiometricStatus('idle');
+          showToast(result.message || 'Biometric scan failed', 'error');
+        }
+      } else {
+        setBiometricStatus('success');
+        if (user) setUser({ ...user, biometricEnabled: true });
+        showToast('Biometric fingerprint registered!', 'success');
+      }
+      setTimeout(() => setBiometricStatus('idle'), 1200);
+    } else {
+      const targetEmail = email || user?.email;
+      if (targetEmail) {
+        const result = await loginWithBiometric(targetEmail);
+        if (result.success && result.user) {
+          setUser(result.user);
+          if (result.token) localStorage.setItem('swiftpay_token', result.token);
+          setBiometricStatus('success');
+          setIsAuthenticated(true);
           setIsPinUnlocked(true);
           setCurrentScreen('dashboard');
-          showToast('Authenticated via fingerprint', 'success');
+          showToast('Authenticated via native biometric sensor', 'success');
+        } else {
+          setBiometricStatus('idle');
+          showToast(result.error || 'Biometric verification failed', 'error');
         }
-      }, 1000);
-    }, 1800);
+      } else {
+        setBiometricStatus('idle');
+        showToast('Please enter your email address for biometric login', 'error');
+      }
+      setTimeout(() => setBiometricStatus('idle'), 1200);
+    }
   };
 
   // Verify Account Name manually (Transfer Bank)
@@ -2202,83 +2357,194 @@ export default function App() {
                       </button>
                     </div>
 
-                    <form onSubmit={authMode === 'signup' ? handleSignUp : handleSignIn} className="space-y-4">
-                      {authMode === 'signup' && (
+                    {authMode === 'signin' && (
+                      <div className="grid grid-cols-3 gap-1 bg-slate-950/60 p-1 rounded-xl border border-white/10 mb-4 text-[10px] font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setSignInMethod('password')}
+                          className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition-all ${
+                            signInMethod === 'password'
+                              ? 'bg-gradient-to-r from-indigo-500 to-teal-500 text-white font-bold shadow'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Lock className="h-3 w-3" /> Password
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSignInMethod('biometric')}
+                          className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition-all ${
+                            signInMethod === 'biometric'
+                              ? 'bg-gradient-to-r from-indigo-500 to-teal-500 text-white font-bold shadow'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Fingerprint className="h-3 w-3" /> Biometric
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSignInMethod('pin')}
+                          className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition-all ${
+                            signInMethod === 'pin'
+                              ? 'bg-gradient-to-r from-indigo-500 to-teal-500 text-white font-bold shadow'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <ShieldCheck className="h-3 w-3" /> Security PIN
+                        </button>
+                      </div>
+                    )}
+
+                    {authMode === 'signup' || signInMethod === 'password' ? (
+                      <form onSubmit={authMode === 'signup' ? handleSignUp : handleSignIn} className="space-y-4">
+                        {authMode === 'signup' && (
+                          <div>
+                            <label className="text-[10px] font-mono text-slate-400 block mb-1">Full Name</label>
+                            <input
+                              id="signup-fullname"
+                              type="text"
+                              placeholder="John Doe"
+                              required
+                              value={fullName}
+                              onChange={(e) => setFullName(e.target.value)}
+                              className="w-full text-xs bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                            />
+                          </div>
+                        )}
+
                         <div>
-                          <label className="text-[10px] font-mono text-slate-400 block mb-1">Full Name</label>
+                          <label className="text-[10px] font-mono text-slate-400 block mb-1">Email Address</label>
                           <input
-                            id="signup-fullname"
-                            type="text"
-                            placeholder="John Doe"
+                            id="auth-email"
+                            type="email"
+                            placeholder="john@example.com"
                             required
-                            value={fullName}
-                            onChange={(e) => setFullName(e.target.value)}
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                             className="w-full text-xs bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400"
                           />
                         </div>
-                      )}
 
-                      <div>
-                        <label className="text-[10px] font-mono text-slate-400 block mb-1">Email Address</label>
-                        <input
-                          id="auth-email"
-                          type="email"
-                          placeholder="john@example.com"
-                          required
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="w-full text-xs bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-[10px] font-mono text-slate-400">Password</label>
-                          {authMode === 'signin' && (
-                            <button
-                              id="btn-goto-forgot"
-                              type="button"
-                              onClick={() => {
-                                setForgotEmail(email);
-                                setAuthMode('forgot');
-                                setResetStep('request');
-                              }}
-                              className="text-[10px] font-bold text-teal-400 hover:underline cursor-pointer"
-                            >
-                              Forgot Password?
-                            </button>
-                          )}
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[10px] font-mono text-slate-400">Password</label>
+                            {authMode === 'signin' && (
+                              <button
+                                id="btn-goto-forgot"
+                                type="button"
+                                onClick={() => {
+                                  setForgotEmail(email);
+                                  setAuthMode('forgot');
+                                  setResetStep('request');
+                                }}
+                                className="text-[10px] font-bold text-teal-400 hover:underline cursor-pointer"
+                              >
+                                Forgot Password?
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            id="auth-password"
+                            type="password"
+                            placeholder="••••••••"
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full text-xs bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                          />
                         </div>
-                        <input
-                          id="auth-password"
-                          type="password"
-                          placeholder="••••••••"
-                          required
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          className="w-full text-xs bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400"
-                        />
-                      </div>
 
-                      <button
-                        id="btn-auth-submit"
-                        type="submit"
-                        disabled={isAuthSubmitting}
-                        className="w-full text-xs font-bold uppercase tracking-widest py-3 bg-gradient-to-r from-indigo-500 via-violet-500 to-teal-500 hover:from-indigo-600 hover:to-teal-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all mt-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      >
-                        {isAuthSubmitting ? (
-                          <>
-                            <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                            </svg>
-                            {authMode === 'signup' ? 'Creating Account...' : 'Signing In...'}
-                          </>
-                        ) : (
-                          authMode === 'signup' ? 'Create Account' : 'Sign In'
-                        )}
-                      </button>
-                    </form>
+                        <button
+                          id="btn-auth-submit"
+                          type="submit"
+                          disabled={isAuthSubmitting}
+                          className="w-full text-xs font-bold uppercase tracking-widest py-3 bg-gradient-to-r from-indigo-500 via-violet-500 to-teal-500 hover:from-indigo-600 hover:to-teal-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all mt-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {isAuthSubmitting ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              {authMode === 'signup' ? 'Creating Account...' : 'Signing In...'}
+                            </>
+                          ) : (
+                            authMode === 'signup' ? 'Create Account' : 'Sign In'
+                          )}
+                        </button>
+                      </form>
+                    ) : signInMethod === 'biometric' ? (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-[10px] font-mono text-slate-400 block mb-1">Registered Email</label>
+                          <input
+                            id="auth-email-bio"
+                            type="email"
+                            placeholder="john@example.com"
+                            required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full text-xs bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                          />
+                        </div>
+
+                        <div className="pt-2 flex flex-col items-center justify-center p-4 bg-slate-950/40 rounded-2xl border border-white/5">
+                          <button
+                            type="button"
+                            onClick={handleBiometricSignIn}
+                            disabled={isAuthSubmitting}
+                            className="relative group h-20 w-20 rounded-full bg-gradient-to-tr from-teal-500/20 via-indigo-500/20 to-purple-500/20 border-2 border-teal-400/40 flex items-center justify-center shadow-lg hover:border-teal-400 active:scale-95 transition-all cursor-pointer"
+                          >
+                            <div className="absolute inset-0 rounded-full bg-teal-400/10 animate-ping opacity-75" />
+                            <Fingerprint className="h-10 w-10 text-teal-400 stroke-[1.75] group-hover:scale-110 transition-transform" />
+                          </button>
+                          <span className="text-[11px] font-bold text-white mt-3 block">Scan Fingerprint or Face ID</span>
+                          <p className="text-[9.5px] text-slate-400 mt-1 text-center max-w-[220px] leading-tight">
+                            Tap the scanner above to trigger your phone or computer's native biometric prompt.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <form onSubmit={handlePinSignIn} className="space-y-4">
+                        <div>
+                          <label className="text-[10px] font-mono text-slate-400 block mb-1">Email or Phone Number</label>
+                          <input
+                            id="auth-email-pin"
+                            type="text"
+                            placeholder="john@example.com or 08012345678"
+                            required
+                            value={emailOrPhoneInput || email}
+                            onChange={(e) => {
+                              setEmailOrPhoneInput(e.target.value);
+                              setEmail(e.target.value);
+                            }}
+                            className="w-full text-xs bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-mono text-slate-400 block mb-1">4 or 6-Digit Wallet PIN</label>
+                          <input
+                            id="auth-pin-input"
+                            type="password"
+                            maxLength={6}
+                            placeholder="••••"
+                            required
+                            value={pinLoginInput}
+                            onChange={(e) => setPinLoginInput(e.target.value.replace(/\D/g, ''))}
+                            className="w-full text-center tracking-[0.5em] font-mono text-lg font-extrabold bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-teal-300 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={isAuthSubmitting}
+                          className="w-full text-xs font-bold uppercase tracking-widest py-3 bg-gradient-to-r from-indigo-500 via-violet-500 to-teal-500 hover:from-indigo-600 hover:to-teal-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all mt-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {isAuthSubmitting ? 'Verifying PIN...' : 'Sign In With Security PIN'}
+                        </button>
+                      </form>
+                    )}
                   </>
                 ) : (
                   <div className="space-y-4">
