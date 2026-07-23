@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, User, Mail, Phone, Building, CreditCard, Hash, Calendar, Check, Image, Coins, ShoppingBag, ShieldAlert, ArrowLeft, Search, UserMinus, ToggleLeft, ToggleRight, Trash2, Edit2, Key, RefreshCw, Send, FileSpreadsheet, BarChart3, Database, MessageSquare, AlertCircle, Video, Settings, DollarSign, CheckCircle, UploadCloud, Clock, ArrowUpRight, FileText, XCircle, AlertTriangle, Inbox, Menu, X } from 'lucide-react';
 import GlassCard from './GlassCard';
+import AdminDashboard1To1 from './AdminDashboard1To1';
 
 interface AdminPanelProps {
   currentUserEmail: string;
@@ -23,7 +24,7 @@ export default function AdminPanel({
   adminPath,
   navigateTo
 }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'voucher_generator' | 'withdrawals'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'voucher_generator' | 'withdrawals' | 'users' | 'settings' | 'logs'>('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Withdrawal Management System State
@@ -1273,6 +1274,23 @@ export default function AdminPanel({
           </button>
         </div>
       </div>
+    );
+  }
+
+  if (activeTab === 'overview') {
+    return (
+      <AdminDashboard1To1
+        totalUsersCount={totalUsersCount}
+        totalSystemBalance={totalSystemBalance}
+        totalRevenue={totalRevenue}
+        totalTxsCount={totalTxsCount}
+        transactions={transactions}
+        users={users}
+        logs={logs}
+        stats={stats}
+        onNavigateTab={(tab) => setActiveTab(tab as any)}
+        onBack={onBack}
+      />
     );
   }
 
