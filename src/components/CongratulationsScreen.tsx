@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Check, Sparkles, Gift, ArrowRight } from 'lucide-react';
+import { Check, Sparkles, ArrowRight, ArrowUpRight, Smartphone, Wifi, Zap, ShieldCheck, Gift } from 'lucide-react';
 
 interface CongratulationsScreenProps {
   userEmail: string;
@@ -15,33 +15,33 @@ export default function CongratulationsScreen({ userEmail, onContinue }: Congrat
 
   useEffect(() => {
     // Generate sparkle coordinates
-    const sparkleList = Array.from({ length: 15 }).map((_, i) => ({
+    const sparkleList = Array.from({ length: 18 }).map((_, i) => ({
       id: i,
       left: `${Math.random() * 90 + 5}%`,
-      top: `${Math.random() * 80 + 10}%`,
-      scale: Math.random() * 0.8 + 0.4,
+      top: `${Math.random() * 85 + 5}%`,
+      scale: Math.random() * 0.7 + 0.3,
       delay: Math.random() * 3,
     }));
     setSparkles(sparkleList);
 
-    // Generate falling confetti properties
-    const colors = ['#38BDF8', '#818CF8', '#A78BFA', '#F472B6', '#34D399', '#FBBF24'];
-    const confettiList = Array.from({ length: 40 }).map((_, i) => ({
+    // Generate elegant, slow falling confetti in fintech brand colors
+    const colors = ['#2dd4bf', '#818cf8', '#38bdf8', '#34d399', '#fbbf24', '#c084fc'];
+    const confettiList = Array.from({ length: 35 }).map((_, i) => ({
       id: i,
       left: `${Math.random() * 98 + 1}%`,
-      delay: Math.random() * 4,
+      delay: Math.random() * 5,
       color: colors[Math.floor(Math.random() * colors.length)],
-      duration: Math.random() * 4 + 4,
+      duration: Math.random() * 5 + 6, // Slower, more elegant drop
     }));
     setConfetti(confettiList);
 
-    // Generate floating glowing particles
-    const particleList = Array.from({ length: 20 }).map((_, i) => ({
+    // Generate floating glowing ambient particles
+    const particleList = Array.from({ length: 22 }).map((_, i) => ({
       id: i,
       left: `${Math.random() * 90 + 5}%`,
       top: `${Math.random() * 90 + 5}%`,
-      delay: Math.random() * 5,
-      size: Math.random() * 6 + 4,
+      delay: Math.random() * 4,
+      size: Math.random() * 5 + 3,
     }));
     setParticles(particleList);
   }, []);
@@ -60,7 +60,6 @@ export default function CongratulationsScreen({ userEmail, onContinue }: Congrat
       if (response.ok) {
         onContinue();
       } else {
-        // Fallback to local continuation if network fails
         onContinue();
       }
     } catch (err) {
@@ -71,20 +70,47 @@ export default function CongratulationsScreen({ userEmail, onContinue }: Congrat
     }
   };
 
+  const featureCards = [
+    {
+      icon: ArrowUpRight,
+      title: "Withdraw Funds",
+      desc: "Instant bank payout",
+      color: "text-teal-400 bg-teal-500/10 border-teal-500/20"
+    },
+    {
+      icon: Smartphone,
+      title: "Buy Airtime",
+      desc: "All Nigerian networks",
+      color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20"
+    },
+    {
+      icon: Wifi,
+      title: "Buy Data",
+      desc: "Instant high-speed data",
+      color: "text-sky-400 bg-sky-500/10 border-sky-500/20"
+    },
+    {
+      icon: Zap,
+      title: "Pay Bills",
+      desc: "TV, Power & Utilities",
+      color: "text-amber-400 bg-amber-500/10 border-amber-500/20"
+    },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-gradient-to-br from-slate-950 via-indigo-950 to-blue-950 text-white font-sans flex flex-col justify-center items-center p-4">
+    <div className="fixed inset-0 z-[100] min-h-screen min-h-[100dvh] w-full bg-[#070712] [background:radial-gradient(ellipse_at_top,#1e1b4b_0%,#070712_60%),radial-gradient(ellipse_at_bottom,#0d9488_0%,#070712_60%)] text-white font-sans flex flex-col justify-between items-center p-4 sm:p-6 md:p-8 overflow-y-auto no-scrollbar">
       
-      {/* Background soft glowing lights / radial glow */}
+      {/* Background glowing blurred orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[120px] animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-[450px] h-[450px] bg-blue-500/10 rounded-full blur-[130px] animate-pulse" style={{ animationDuration: '6s' }} />
+        <div className="absolute top-1/4 left-1/4 w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-indigo-500/10 rounded-full blur-[140px] animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-teal-500/10 rounded-full blur-[140px] animate-pulse" style={{ animationDuration: '7s' }} />
       </div>
 
       {/* Floating particles */}
       {particles.map((p) => (
         <motion.div
           key={`part-${p.id}`}
-          className="absolute rounded-full bg-indigo-300/20 blur-[1px] pointer-events-none"
+          className="absolute rounded-full bg-teal-300/20 blur-[1px] pointer-events-none"
           style={{
             left: p.left,
             top: p.top,
@@ -92,9 +118,9 @@ export default function CongratulationsScreen({ userEmail, onContinue }: Congrat
             height: p.size,
           }}
           animate={{
-            y: [0, -40, 0],
-            x: [0, 15, 0],
-            opacity: [0.1, 0.6, 0.1],
+            y: [0, -35, 0],
+            x: [0, 12, 0],
+            opacity: [0.1, 0.5, 0.1],
           }}
           transition={{
             duration: 8 + (p.id % 4),
@@ -109,24 +135,24 @@ export default function CongratulationsScreen({ userEmail, onContinue }: Congrat
       {sparkles.map((s) => (
         <motion.div
           key={`spark-${s.id}`}
-          className="absolute text-yellow-300/60 pointer-events-none"
+          className="absolute pointer-events-none"
           style={{
             left: s.left,
             top: s.top,
           }}
           animate={{
             scale: [0, s.scale, 0],
-            opacity: [0, 0.9, 0],
+            opacity: [0, 0.8, 0],
             rotate: [0, 180],
           }}
           transition={{
-            duration: 3 + (s.id % 3),
+            duration: 3.5 + (s.id % 3),
             repeat: Infinity,
             delay: s.delay,
             ease: 'easeInOut',
           }}
         >
-          <Sparkles className="w-5 h-5 fill-yellow-300/20 text-yellow-300" />
+          <Sparkles className="w-4 h-4 fill-teal-300/20 text-teal-300" />
         </motion.div>
       ))}
 
@@ -135,16 +161,16 @@ export default function CongratulationsScreen({ userEmail, onContinue }: Congrat
         {confetti.map((c) => (
           <motion.div
             key={`conf-${c.id}`}
-            className="absolute w-2 h-4 rounded-sm"
+            className="absolute w-1.5 h-3.5 rounded-sm opacity-80"
             style={{
               left: c.left,
               backgroundColor: c.color,
               top: '-20px',
             }}
             animate={{
-              y: ['0vh', '105vh'],
-              rotate: [0, 360 + (c.id * 10)],
-              x: ['0px', `${(c.id % 2 === 0 ? 1 : -1) * (30 + (c.id % 10))}px`],
+              y: ['0vh', '108vh'],
+              rotate: [0, 360 + (c.id * 12)],
+              x: ['0px', `${(c.id % 2 === 0 ? 1 : -1) * (25 + (c.id % 8))}px`],
             }}
             transition={{
               duration: c.duration,
@@ -156,143 +182,154 @@ export default function CongratulationsScreen({ userEmail, onContinue }: Congrat
         ))}
       </div>
 
-      {/* Content wrapper with scale entrance */}
+      {/* Top Header Branding */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+        className="w-full max-w-xl mx-auto flex items-center justify-between pt-2 relative z-10"
+      >
+        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10">
+          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-teal-400 flex items-center justify-center shadow-md">
+            <span className="text-white font-black text-xs tracking-tighter">SP</span>
+          </div>
+          <span className="text-sm font-black tracking-tight bg-gradient-to-r from-teal-400 to-indigo-300 bg-clip-text text-transparent">
+            SwiftPay
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-mono font-bold text-emerald-400">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+          VERIFIED USER
+        </div>
+      </motion.div>
+
+      {/* Main Content Container */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, ease: 'easeOut' }}
-        className="w-full max-w-lg flex flex-col items-center relative z-10 py-6"
+        transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
+        className="w-full max-w-md my-auto relative z-10 py-4 flex flex-col items-center text-center space-y-4"
       >
         
-        {/* Floating SwiftPay Logo at the top */}
-        <motion.div
-          animate={{ y: [0, -8, 0] }}
-          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-          className="mb-8 flex flex-col items-center"
-        >
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.2)]">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-teal-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <span className="text-white font-black text-sm tracking-tighter">SP</span>
-            </div>
-            <span className="text-xl font-black font-display tracking-tight bg-gradient-to-r from-teal-400 via-indigo-300 to-indigo-400 bg-clip-text text-transparent">
-              SwiftPay
-            </span>
-          </div>
-        </motion.div>
-
-        {/* Large Glowing Success checkmark badge with light rays behind it */}
-        <div className="relative mb-6">
-          {/* Glowing aura / light rays effect */}
-          <div className="absolute inset-0 bg-teal-500/20 rounded-full blur-xl scale-125 animate-pulse" />
-          <div className="absolute -inset-4 bg-gradient-to-tr from-indigo-500/20 to-teal-400/20 rounded-full blur-md animate-spin" style={{ animationDuration: '10s' }} />
+        {/* Animated Success Checkmark Badge */}
+        <div className="relative mb-1">
+          {/* Glowing Aura */}
+          <div className="absolute inset-0 bg-teal-400/20 rounded-full blur-2xl scale-150 animate-pulse" />
+          <div className="absolute -inset-3 bg-gradient-to-tr from-indigo-500/30 to-teal-400/30 rounded-full blur-md animate-spin" style={{ animationDuration: '12s' }} />
           
           <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.2 }}
-            className="w-24 h-24 rounded-full bg-gradient-to-tr from-teal-500 to-indigo-600 flex items-center justify-center border-2 border-teal-300/30 shadow-[0_0_30px_rgba(20,184,166,0.4)] relative z-10"
+            initial={{ scale: 0, rotate: -45 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 16, delay: 0.2 }}
+            className="w-20 h-20 sm:w-22 sm:h-22 rounded-full bg-gradient-to-tr from-teal-500 via-indigo-600 to-teal-400 flex items-center justify-center border-2 border-teal-300/40 shadow-[0_0_40px_rgba(45,212,191,0.4)] relative z-10"
           >
-            <Check className="w-12 h-12 text-teal-200 stroke-[3]" />
+            <Check className="w-10 h-10 sm:w-11 sm:h-11 text-teal-100 stroke-[3.5]" />
           </motion.div>
         </div>
 
-        {/* Heading */}
-        <div className="text-center mb-6">
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-indigo-100 to-teal-100 bg-clip-text text-transparent">
-            🎉 Congratulations!
+        {/* Title and Subtitle */}
+        <div className="space-y-1">
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white font-display">
+            Congratulations!
           </h1>
-          <p className="text-indigo-300 font-medium text-lg mt-1 tracking-wide">
-            You are qualified!
+          <p className="text-sm font-semibold text-teal-300 tracking-wide">
+            Your SwiftPay account is now active.
           </p>
         </div>
 
-        {/* Floating Gift Box Illustration */}
+        {/* Floating Glassmorphism Reward Card */}
         <motion.div
-          animate={{ y: [0, -12, 0] }}
-          transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-          className="relative mb-6"
+          animate={{ y: [0, -4, 0] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+          className="w-full bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-2xl p-4 sm:p-5 text-center shadow-2xl relative overflow-hidden space-y-2 border-t-white/20"
         >
-          {/* Soft shadow on the floor below the gift */}
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-12 h-2 bg-black/40 rounded-full blur-sm scale-75 animate-pulse" />
-          
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/30 to-teal-500/30 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-lg shadow-indigo-500/20 relative">
-            <Gift className="w-8 h-8 text-teal-300 animate-bounce" style={{ animationDuration: '3s' }} />
-            {/* Floating currency symbols nearby */}
-            <motion.span
-              animate={{ y: [0, -15, 0], x: [0, 8, 0], opacity: [0, 1, 0] }}
-              transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute -top-3 -right-3 text-lg font-bold text-teal-300/80 pointer-events-none"
-            >
-              ₦
-            </motion.span>
-            <motion.span
-              animate={{ y: [0, -20, 0], x: [0, -10, 0], opacity: [0, 1, 0] }}
-              transition={{ duration: 3.2, repeat: Infinity, delay: 0.6, ease: 'easeInOut' }}
-              className="absolute -bottom-2 -left-3 text-sm font-bold text-indigo-300/80 pointer-events-none"
-            >
-              ₦
-            </motion.span>
+          {/* Subtle background glow */}
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-500/10 via-indigo-500/5 to-transparent pointer-events-none" />
+
+          <div className="flex items-center justify-center gap-2 text-indigo-300 font-bold text-xs uppercase tracking-wider">
+            <Gift className="w-4 h-4 text-teal-400" />
+            <span>Welcome Reward</span>
           </div>
-        </motion.div>
 
-        {/* Reward Card with gentle breathing animation */}
-        <motion.div
-          animate={{ scale: [1, 1.015, 1], boxShadow: ['0 10px 30px -10px rgba(99,102,241,0.2)', '0 15px 35px -5px rgba(20,184,166,0.3)', '0 10px 30px -10px rgba(99,102,241,0.2)'] }}
-          transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-          className="w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 mb-6 text-center shadow-2xl relative overflow-hidden"
-        >
-          {/* Subtle glow grid in background */}
-          <div className="absolute inset-0 bg-gradient-to-br from-teal-500/5 via-indigo-500/5 to-transparent pointer-events-none" />
-
-          <p className="text-indigo-200 text-xs tracking-wider uppercase font-semibold">
-            You have been gifted
-          </p>
-          <div className="my-2 select-all">
-            <span className="text-4xl sm:text-5xl font-black bg-gradient-to-r from-teal-300 via-cyan-200 to-white bg-clip-text text-transparent drop-shadow-[0_2px_15px_rgba(20,184,166,0.3)] font-mono">
+          <div className="py-1">
+            <span className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-teal-300 via-emerald-200 to-white bg-clip-text text-transparent font-mono tracking-tight drop-shadow-[0_2px_15px_rgba(45,212,191,0.3)]">
               ₦200,000
             </span>
           </div>
-          <span className="inline-block px-3 py-1 rounded-full text-xs font-black tracking-widest bg-teal-500/20 text-teal-300 border border-teal-500/30 uppercase mb-4 shadow-[0_0_10px_rgba(20,184,166,0.15)] animate-pulse">
-            FREE
-          </span>
-          <p className="text-indigo-100 text-sm leading-relaxed max-w-sm mx-auto">
-            This reward has been successfully added to your SwiftPay wallet.
+
+          <div className="inline-block px-3 py-1 rounded-full bg-teal-500/15 border border-teal-500/30 text-teal-300 text-[11px] font-bold tracking-wider uppercase">
+            Business Capital Support
+          </div>
+
+          <p className="text-[11px] text-slate-300 font-medium pt-1 border-t border-white/5">
+            Available every 24 hours for 3 consecutive days.
           </p>
         </motion.div>
 
-        {/* Welcome Card */}
-        <div className="w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-5 mb-8 text-center shadow-lg">
-          <h2 className="text-lg font-bold text-teal-300 mb-1">Welcome to SwiftPay</h2>
-          <p className="text-indigo-200 text-sm leading-relaxed max-w-xs mx-auto">
-            We're excited to have you join our community. Enjoy secure, fast and reliable financial services.
+        {/* Information Section */}
+        <div className="w-full bg-white/[0.02] border border-white/5 rounded-xl p-3.5 text-left text-xs text-slate-300 leading-relaxed space-y-1">
+          <p className="font-semibold text-white flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
+            Reward Activation Notice
+          </p>
+          <p className="text-[11px] text-slate-300">
+            Your welcome reward has been successfully activated. You can access up to ₦200,000 every 24 hours for three consecutive days after completing the required verification process.
           </p>
         </div>
 
-        {/* Continue Button with glowing pulse effect */}
+        {/* Feature Preview Grid (2x2) */}
+        <div className="w-full grid grid-cols-2 gap-2 text-left pt-1">
+          {featureCards.map((feat, idx) => {
+            const IconComp = feat.icon;
+            return (
+              <div
+                key={idx}
+                className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 hover:border-white/15 transition-all flex items-center gap-2.5"
+              >
+                <div className={`p-2 rounded-lg border shrink-0 ${feat.color}`}>
+                  <IconComp className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-white truncate">{feat.title}</div>
+                  <div className="text-[9.5px] text-slate-400 truncate">{feat.desc}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+      </motion.div>
+
+      {/* Bottom Continue Button CTA */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
+        className="w-full max-w-md mx-auto relative z-10 pb-2"
+      >
         <motion.button
           onClick={handleContinue}
           disabled={isSubmitting}
-          whileHover={{ scale: 1.02, boxShadow: '0 0 25px rgba(20,184,166,0.6)' }}
+          whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
-          animate={{
-            boxShadow: [
-              '0 0 12px rgba(99,102,241,0.3)',
-              '0 0 22px rgba(20,184,166,0.5)',
-              '0 0 12px rgba(99,102,241,0.3)'
-            ]
-          }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-teal-500 via-indigo-600 to-indigo-700 text-white font-extrabold text-base tracking-wide flex items-center justify-center gap-2 shadow-lg transition-all border border-teal-300/20 disabled:opacity-50 cursor-pointer"
+          className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-teal-400 via-indigo-500 to-teal-400 hover:from-teal-300 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(45,212,191,0.3)] hover:shadow-[0_0_40px_rgba(45,212,191,0.5)] transition-all cursor-pointer disabled:opacity-50"
         >
-          {isSubmitting ? 'Loading...' : (
+          {isSubmitting ? (
+            <span className="flex items-center gap-2">
+              <span className="w-4 h-4 rounded-full border-2 border-slate-950 border-t-transparent animate-spin"></span>
+              Setting Up Your Wallet...
+            </span>
+          ) : (
             <>
               Continue to Dashboard
-              <ArrowRight className="w-5 h-5" />
+              <ArrowRight className="w-4 h-4 stroke-[3]" />
             </>
           )}
         </motion.button>
-
       </motion.div>
+
     </div>
   );
 }
+
