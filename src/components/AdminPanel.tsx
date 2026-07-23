@@ -957,13 +957,13 @@ export default function AdminPanel({
       colorClass: string = "text-teal-400",
       borderLeftClass: string = "border-l-teal-500"
     ) => (
-      <div className={`p-5 flex items-center gap-4 border border-white/5 bg-[#0a0a14] rounded-2xl border-l-4 ${borderLeftClass} hover:border-white/10 hover:bg-[#0e0e1c] hover:scale-[1.01] transition-all duration-200 shadow-md`}>
-        <div className={`p-3 rounded-xl bg-white/[0.02] border border-white/5 ${colorClass} shrink-0`}>
-          <IconComponent className="h-5 w-5" />
+      <div className={`p-3 sm:p-3.5 flex items-center gap-3 border border-white/10 bg-[#0d0d18] rounded-xl border-l-4 ${borderLeftClass} hover:border-white/20 transition-all shadow-sm`}>
+        <div className={`p-2 rounded-lg bg-white/[0.03] border border-white/5 ${colorClass} shrink-0`}>
+          <IconComponent className="h-4 w-4" />
         </div>
-        <div className="space-y-1 min-w-0 flex-1">
-          <span className="text-[10px] text-slate-400 font-mono tracking-widest block uppercase font-bold">{label}</span>
-          <span className="text-sm font-bold text-white block truncate">{value}</span>
+        <div className="space-y-0.5 min-w-0 flex-1">
+          <span className="text-[9px] text-slate-400 font-mono tracking-wider block uppercase font-bold">{label}</span>
+          <span className="text-xs sm:text-sm font-bold text-white block truncate">{value}</span>
         </div>
       </div>
     );
@@ -971,39 +971,38 @@ export default function AdminPanel({
     const hasSlip = !!(selectedWithdrawal.posSlipPath || selectedWithdrawal.posslippath);
 
     return (
-      <div className="w-full bg-[#050508] p-4 md:p-8 lg:p-12 space-y-8 h-full overflow-y-auto no-scrollbar animate-[fadeIn_0.3s_ease-out]">
+      <div className="w-full min-h-screen bg-[#07070e] text-white p-3 sm:p-5 space-y-5 overflow-x-hidden font-sans animate-[fadeIn_0.2s_ease-out]">
         {/* Navigation Header */}
-        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-6">
+        <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
           <button
             onClick={() => {
               setActiveTab('withdrawals');
               navigateTo && navigateTo('/admin');
             }}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all text-slate-300 hover:text-white text-xs font-semibold cursor-pointer w-fit shadow-md hover:scale-[1.02]"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-slate-300 hover:text-white text-xs font-bold cursor-pointer w-fit"
           >
             <ArrowLeft className="h-4 w-4 text-slate-400" />
             Back to Withdrawals
           </button>
           <div className="text-left sm:text-right">
-            <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">SYSTEM AUDIT REFERENCE</span>
-            <span className="text-sm font-mono font-bold text-teal-400">{selectedWithdrawal.reference || selectedWithdrawal.id}</span>
+            <span className="text-[9px] text-slate-400 font-mono tracking-wider block uppercase font-bold">SYSTEM AUDIT REFERENCE</span>
+            <span className="text-xs sm:text-sm font-mono font-bold text-teal-400">{selectedWithdrawal.reference || selectedWithdrawal.id}</span>
           </div>
         </div>
 
-        {/* 1. Large Status Card (Transaction Processing) */}
-        <div className="max-w-[1600px] mx-auto p-6 md:p-10 rounded-[2rem] border border-amber-500/20 bg-amber-500/[0.02] backdrop-blur-md shadow-[0_0_80px_-20px_rgba(245,158,11,0.08)] flex flex-col lg:flex-row items-center justify-between gap-8">
-          <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left w-full lg:w-auto">
+        {/* 1. Status Card (Transaction Processing) */}
+        <div className="w-full p-4 sm:p-6 rounded-2xl border border-amber-500/20 bg-amber-500/[0.03] backdrop-blur-md shadow-md flex flex-col lg:flex-row items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left w-full lg:w-auto">
             <div className="relative flex items-center justify-center shrink-0">
-              <div className="absolute inset-0 rounded-full bg-amber-500/10 animate-ping opacity-60" style={{ animationDuration: '3s' }}></div>
-              <div className="relative p-5 rounded-full bg-amber-500/10 border border-amber-500/20 shadow-lg">
-                <RefreshCw className="h-9 w-9 text-amber-500 animate-[spin_5s_linear_infinite]" />
+              <div className="relative p-3.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <RefreshCw className="h-6 w-6 text-amber-400 animate-[spin_5s_linear_infinite]" />
               </div>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight flex items-center justify-center sm:justify-start gap-3">
+            <div className="space-y-1">
+              <h2 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center justify-center sm:justify-start gap-2.5">
                 Transaction Processing
                 {statusLower !== 'pending' && statusLower !== 'processing' && (
-                  <span className={`text-[10px] tracking-widest px-3 py-1 rounded-full border font-bold uppercase ${
+                  <span className={`text-[9px] tracking-wider px-2.5 py-0.5 rounded-full border font-bold uppercase ${
                     statusLower === 'completed' || statusLower === 'success'
                       ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                       : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
@@ -1012,25 +1011,25 @@ export default function AdminPanel({
                   </span>
                 )}
               </h2>
-              <p className="text-sm md:text-base text-slate-300 font-medium">This withdrawal request is awaiting manual verification.</p>
+              <p className="text-xs text-slate-300 font-medium">This withdrawal request is awaiting manual verification.</p>
             </div>
           </div>
-          <div className="text-center lg:text-right shrink-0 w-full lg:w-auto border-t lg:border-t-0 border-white/5 pt-6 lg:pt-0">
-            <span className="text-[10px] text-amber-500 font-mono tracking-widest block uppercase font-bold mb-1">WITHDRAWAL AMOUNT</span>
-            <span className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 font-mono">
+          <div className="text-center lg:text-right shrink-0 w-full lg:w-auto border-t lg:border-t-0 border-white/5 pt-4 lg:pt-0">
+            <span className="text-[9px] text-amber-400 font-mono tracking-wider block uppercase font-bold mb-0.5">WITHDRAWAL AMOUNT</span>
+            <span className="text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400 font-mono">
               ₦{Number(selectedWithdrawal.amount || 0).toLocaleString()}
             </span>
           </div>
         </div>
 
         {/* 2. Modern Account Details Section */}
-        <div className="max-w-[1600px] mx-auto space-y-6">
-          <div className="border-b border-white/5 pb-4">
-            <h3 className="text-lg font-black text-white uppercase tracking-wider">Account Details</h3>
-            <p className="text-xs text-slate-400 mt-1">Validated recipient banking details and request specifications.</p>
+        <div className="w-full space-y-4">
+          <div className="border-b border-white/10 pb-2">
+            <h3 className="text-sm font-black text-white uppercase tracking-wider">Account Details</h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">Validated recipient banking details and request specifications.</p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {renderFieldCard("Full Name", selectedWithdrawal.fullName || selectedWithdrawal.accountName || selectedWithdrawal.accountname || 'N/A', User, "text-indigo-400", "border-l-indigo-500")}
             {renderFieldCard("Email Address", selectedWithdrawal.email || selectedWithdrawal.userId || 'N/A', Mail, "text-violet-400", "border-l-violet-500")}
             {renderFieldCard("Phone Number", selectedWithdrawal.phone || 'N/A', Phone, "text-purple-400", "border-l-purple-500")}
@@ -1045,7 +1044,7 @@ export default function AdminPanel({
           </div>
         </div>
 
-        <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* POS Slip Area (7 cols on lg) */}
           <div className="lg:col-span-7 space-y-6">
             {/* POS Decline Slip Terminal */}
@@ -1278,13 +1277,14 @@ export default function AdminPanel({
   }
 
   return (
-    <div className="p-5 space-y-6 h-full overflow-y-auto no-scrollbar animate-[fadeIn_0.2s_ease-out]">
+    <div className="w-full min-h-screen bg-[#07070e] text-white p-2.5 sm:p-4 md:p-5 space-y-4 overflow-x-hidden font-sans animate-[fadeIn_0.2s_ease-out]">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-3">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between border-b border-white/10 pb-3 gap-2">
+        <div className="flex items-center gap-2.5">
           <button
             onClick={onBack}
-            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 transition-all cursor-pointer"
+            title="Exit Admin Panel"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -1292,17 +1292,24 @@ export default function AdminPanel({
           {/* Mobile hamburger menu toggle */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-teal-400 cursor-pointer flex items-center justify-center border border-white/5"
+            className="lg:hidden p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-teal-400 cursor-pointer flex items-center justify-center border border-white/10"
             title="Toggle Menu"
           >
             {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
 
           <div>
-            <h3 className="text-base font-black font-display text-slate-800 dark:text-white">Admin Central Console</h3>
-            <p className="text-[10px] text-slate-400 font-mono mt-0.5">Fintech Management &amp; System Auditing</p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm sm:text-base font-black tracking-tight text-white">Admin Central Console</h3>
+              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-mono font-bold text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                LIVE
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-mono">Fintech Operations &amp; Audit Console</p>
           </div>
         </div>
+
         <button
           onClick={() => {
             fetchAllUsers();
@@ -1310,31 +1317,31 @@ export default function AdminPanel({
             fetchLogs();
             setMobileMenuOpen(false);
           }}
-          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-teal-400 border border-white/10 cursor-pointer flex items-center gap-1 text-[10px]"
+          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-teal-400 border border-white/10 cursor-pointer flex items-center gap-1.5 text-[10px] font-bold uppercase transition-all shrink-0"
           title="Refresh All Data"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Refresh
+          <span className="hidden sm:inline">Sync Data</span>
         </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Sleek Sidebar Menu */}
-        <div className={`w-full lg:w-64 shrink-0 flex flex-col space-y-2 bg-slate-950/20 border border-white/5 rounded-2xl p-4 transition-all duration-300 ${mobileMenuOpen ? 'flex' : 'hidden lg:flex'}`}>
-          <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2 px-2.5 font-bold">Admin Navigation</div>
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
+        {/* Compact Sidebar Menu */}
+        <div className={`w-full lg:w-56 shrink-0 flex flex-col space-y-1.5 bg-[#0d0d18] border border-white/10 rounded-xl p-2.5 transition-all duration-300 ${mobileMenuOpen ? 'flex' : 'hidden lg:flex'}`}>
+          <div className="text-[9px] font-mono uppercase tracking-wider text-slate-500 mb-1 px-2 font-bold">Admin Navigation</div>
           
           <button
             onClick={() => {
               setActiveTab('overview');
               setMobileMenuOpen(false);
             }}
-            className={`w-full text-left px-3.5 py-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2.5 transition-all cursor-pointer ${
+            className={`w-full text-left px-3 py-2 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'overview'
-                ? 'bg-gradient-to-r from-teal-500/10 to-indigo-500/10 border border-teal-500/20 text-teal-400 shadow-[0_4px_25px_rgba(20,184,166,0.06)]'
+                ? 'bg-gradient-to-r from-teal-500/15 to-indigo-500/15 border border-teal-500/30 text-teal-400'
                 : 'border border-transparent hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
-            <BarChart3 className="h-4 w-4 text-teal-400" />
+            <BarChart3 className="h-3.5 w-3.5 text-teal-400" />
             Dashboard Overview
           </button>
           
@@ -1343,13 +1350,13 @@ export default function AdminPanel({
               setActiveTab('voucher_generator');
               setMobileMenuOpen(false);
             }}
-            className={`w-full text-left px-3.5 py-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2.5 transition-all cursor-pointer ${
+            className={`w-full text-left px-3 py-2 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'voucher_generator'
-                ? 'bg-gradient-to-r from-teal-500/10 to-indigo-500/10 border border-teal-500/20 text-teal-400 shadow-[0_4px_25px_rgba(20,184,166,0.06)]'
+                ? 'bg-gradient-to-r from-teal-500/15 to-indigo-500/15 border border-teal-500/30 text-teal-400'
                 : 'border border-transparent hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
-            <Key className="h-4 w-4 text-teal-400" />
+            <Key className="h-3.5 w-3.5 text-teal-400" />
             WDV Voucher Generator
           </button>
 
@@ -1358,20 +1365,27 @@ export default function AdminPanel({
               setActiveTab('withdrawals');
               setMobileMenuOpen(false);
             }}
-            className={`w-full text-left px-3.5 py-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2.5 transition-all cursor-pointer ${
+            className={`w-full text-left px-3 py-2 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 justify-between transition-all cursor-pointer ${
               activeTab === 'withdrawals'
-                ? 'bg-gradient-to-r from-teal-500/10 to-indigo-500/10 border border-teal-500/20 text-teal-400 shadow-[0_4px_25px_rgba(20,184,166,0.06)]'
+                ? 'bg-gradient-to-r from-teal-500/15 to-indigo-500/15 border border-teal-500/30 text-teal-400'
                 : 'border border-transparent hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
-            <DollarSign className="h-4 w-4 text-teal-400" />
-            Withdrawals
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-3.5 w-3.5 text-teal-400" />
+              Withdrawals
+            </div>
+            {stats.pendingCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-yellow-500/20 text-yellow-400 text-[9px] font-mono font-bold">
+                {stats.pendingCount}
+              </span>
+            )}
           </button>
 
-          <div className="pt-4 border-t border-white/5 mt-4">
+          <div className="pt-2 border-t border-white/5 mt-2">
             <button
               onClick={onBack}
-              className="w-full text-left px-3.5 py-2.5 rounded-xl border border-white/5 hover:border-red-500/25 hover:bg-red-500/10 text-slate-400 hover:text-red-400 font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer"
+              className="w-full text-left px-3 py-1.5 rounded-lg border border-white/5 hover:border-red-500/25 hover:bg-red-500/10 text-slate-400 hover:text-red-400 font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               Exit Console
@@ -1380,7 +1394,7 @@ export default function AdminPanel({
         </div>
 
         {/* Content Workspace */}
-        <div className="flex-1 w-full space-y-6">
+        <div className="flex-1 w-full space-y-4 min-w-0">
           {activeTab === 'overview' && (
             <>
               {/* Overview Statistics Cards Grid */}
