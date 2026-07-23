@@ -17,9 +17,9 @@ export default function BottomNav({ activeTab, onTabChange, onFabClick }: Bottom
   ];
 
   return (
-    <div className="relative">
+    <div className="relative shrink-0 z-30 w-full">
       {/* Center FAB */}
-      <div className="absolute left-1/2 -top-5 -translate-x-1/2 z-30">
+      <div className="absolute left-1/2 -top-5 -translate-x-1/2 z-40">
         <button
           id="btn-center-fab"
           type="button"
@@ -32,7 +32,7 @@ export default function BottomNav({ activeTab, onTabChange, onFabClick }: Bottom
       </div>
 
       {/* Floating Bottom Nav Container */}
-      <div className="w-full h-14 bg-[#0a0a12]/95 backdrop-blur-xl border-t border-white/[0.08] flex items-center justify-around px-3 py-1 shadow-lg relative z-20">
+      <div className="w-full h-14 bg-[#0a0a12]/95 backdrop-blur-xl border-t border-white/[0.08] flex items-center justify-around px-3 py-1 shadow-lg relative z-30 pb-safe">
         {tabs.map((tab, idx) => {
           if (tab.isFabSpace) {
             return <div key={`spacer-${idx}`} className="w-10 h-10" />; // Empty placeholder for FAB

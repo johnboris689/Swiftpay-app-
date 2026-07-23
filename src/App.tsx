@@ -659,7 +659,7 @@ export default function App() {
   }, []);
 
   const getContainerClasses = () => {
-    return "w-full min-h-screen h-full min-h-[100dvh] bg-[#0c0c14] relative flex flex-col overflow-hidden transition-colors duration-300";
+    return "w-full h-screen h-[100dvh] max-h-[100dvh] bg-[#0c0c14] relative flex flex-col overflow-hidden transition-colors duration-300";
   };
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -2280,7 +2280,7 @@ export default function App() {
         />
       )}
       {/* Full-Screen Edge-to-Edge Container */}
-      <div className="w-full min-h-screen min-h-[100dvh] bg-[#0c0c14] text-white flex flex-col font-sans overflow-x-hidden">
+      <div className="w-full h-screen h-[100dvh] max-h-[100dvh] bg-[#0c0c14] text-white flex flex-col font-sans overflow-hidden">
         {/* Main Core Viewport Container */}
         <div
           id="swiftpay-mobile-container"
@@ -2801,53 +2801,55 @@ export default function App() {
             )}
 
             {/* Main view container containing top-bar and actual tab routes */}
-            <div className="flex-1 flex flex-col justify-between h-full relative overflow-hidden bg-[#0c0c14]">
-              {/* Top Navigation Header */}
-              <div className="px-4 py-2 sm:px-5 sm:py-2.5 border-b border-white/5 flex items-center justify-between bg-[#0c0c14]/90 backdrop-blur-md relative z-10 shrink-0">
-                <div className="flex items-center gap-2.5">
-                  {(deviceType === 'mobile' || deviceType === 'tablet') && (
-                    <button
-                      id="btn-sidebar-toggle"
-                      onClick={() => setIsSidebarOpen(true)}
-                      className="p-1 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
-                    >
-                      <Menu className="h-4.5 w-4.5" />
-                    </button>
-                  )}
-                  <span className="text-lg font-black font-display bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] bg-clip-text text-transparent">
-                    SwiftPay
-                  </span>
-
-                  {/* Adaptive Device Layout Detected Badge */}
-                  <div className="flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full shadow-inner">
-                    <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
-                    <span className="text-[8px] font-mono text-[#2dd4bf] uppercase tracking-wider font-bold">
-                      {deviceType === 'mobile' && 'Mobile Phone'}
-                      {deviceType === 'tablet' && 'Tablet'}
-                      {deviceType === 'laptop' && 'Laptop'}
-                      {deviceType === 'desktop' && 'Desktop'}
-                      {deviceType === 'large' && 'Large Display'}
+            <div className="flex-1 flex flex-col h-full min-h-0 relative overflow-hidden bg-[#0c0c14]">
+              {/* Fixed Top Header (Never Scroll) */}
+              <div className="shrink-0 z-30 bg-[#0c0c14]/95 backdrop-blur-xl border-b border-white/5 sticky top-0 w-full pt-safe">
+                <div className="px-4 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    {(deviceType === 'mobile' || deviceType === 'tablet') && (
+                      <button
+                        id="btn-sidebar-toggle"
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="p-1 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                      >
+                        <Menu className="h-4.5 w-4.5" />
+                      </button>
+                    )}
+                    <span className="text-lg font-black font-display bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] bg-clip-text text-transparent">
+                      SwiftPay
                     </span>
+
+                    {/* Adaptive Device Layout Detected Badge */}
+                    <div className="flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full shadow-inner">
+                      <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
+                      <span className="text-[8px] font-mono text-[#2dd4bf] uppercase tracking-wider font-bold">
+                        {deviceType === 'mobile' && 'Mobile Phone'}
+                        {deviceType === 'tablet' && 'Tablet'}
+                        {deviceType === 'laptop' && 'Laptop'}
+                        {deviceType === 'desktop' && 'Desktop'}
+                        {deviceType === 'large' && 'Large Display'}
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Right Notification Bell with badge */}
+                  <button
+                    id="btn-notif-toggle"
+                    onClick={() => setIsNotificationsOpen(true)}
+                    className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white relative transition-colors"
+                  >
+                    <Bell className="h-4.5 w-4.5" />
+                    {notifications.filter(n => n.unread).length > 0 && (
+                      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 border border-slate-950 animate-bounce" />
+                    )}
+                  </button>
                 </div>
 
-                {/* Right Notification Bell with badge */}
-                <button
-                  id="btn-notif-toggle"
-                  onClick={() => setIsNotificationsOpen(true)}
-                  className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white relative transition-colors"
-                >
-                  <Bell className="h-4.5 w-4.5" />
-                  {notifications.filter(n => n.unread).length > 0 && (
-                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 border border-slate-950 animate-bounce" />
-                  )}
-                </button>
+                <LiveTicker />
               </div>
 
-              <LiveTicker />
-
             {/* Main scrollable view containers based on Current Screen & Tab */}
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-6">
+            <div className="flex-1 overflow-y-auto min-h-0 no-scrollbar pb-6 focus:outline-none">
               
               {/* -------------------- SUB-VIEW: HOME DASHBOARD (wallet tab) -------------------- */}
               {currentScreen === 'dashboard' && activeTab === 'wallet' && (
@@ -4985,15 +4987,17 @@ export default function App() {
 
             </div>
 
-            {/* Bottom floating menus & Navigation sheets */}
-            <BottomNav
-              activeTab={activeTab}
-              onTabChange={(tab) => {
-                setActiveTab(tab);
-                setCurrentScreen('dashboard');
-              }}
-              onFabClick={() => setIsFabMenuOpen(true)}
-            />
+            {/* Fixed Bottom Navigation Bar (Never Scroll) */}
+            <div className="shrink-0 z-30 sticky bottom-0 w-full bg-[#0c0c14] border-t border-white/5 pb-safe">
+              <BottomNav
+                activeTab={activeTab}
+                onTabChange={(tab) => {
+                  setActiveTab(tab);
+                  setCurrentScreen('dashboard');
+                }}
+                onFabClick={() => setIsFabMenuOpen(true)}
+              />
+            </div>
 
             {/* Quick action fab overlay sheet */}
             <QuickFabMenu
