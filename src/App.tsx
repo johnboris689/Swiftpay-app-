@@ -2591,29 +2591,29 @@ export default function App() {
             {/* Main view container containing top-bar and actual tab routes */}
             <div className="flex-1 flex flex-col justify-between h-full relative overflow-hidden bg-[#0c0c14]">
               {/* Top Navigation Header */}
-              <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between bg-[#0c0c14]/80 backdrop-blur-md relative z-10 shrink-0">
-                <div className="flex items-center gap-3">
+              <div className="px-4 py-2 sm:px-5 sm:py-2.5 border-b border-white/5 flex items-center justify-between bg-[#0c0c14]/90 backdrop-blur-md relative z-10 shrink-0">
+                <div className="flex items-center gap-2.5">
                   {(deviceType === 'mobile' || deviceType === 'tablet') && (
                     <button
                       id="btn-sidebar-toggle"
                       onClick={() => setIsSidebarOpen(true)}
-                      className="p-1.5 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                      className="p-1 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
                     >
-                      <Menu className="h-5 w-5" />
+                      <Menu className="h-4.5 w-4.5" />
                     </button>
                   )}
-                  <span className="text-xl font-extrabold font-display bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] bg-clip-text text-transparent">
+                  <span className="text-lg font-black font-display bg-gradient-to-r from-[#818cf8] to-[#2dd4bf] bg-clip-text text-transparent">
                     SwiftPay
                   </span>
 
                   {/* Adaptive Device Layout Detected Badge */}
-                  <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full shadow-inner">
+                  <div className="flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full shadow-inner">
                     <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
-                    <span className="text-[8px] md:text-[9px] font-mono text-[#2dd4bf] uppercase tracking-wider font-bold">
+                    <span className="text-[8px] font-mono text-[#2dd4bf] uppercase tracking-wider font-bold">
                       {deviceType === 'mobile' && 'Mobile Phone'}
-                      {deviceType === 'tablet' && 'Tablet Optimized'}
-                      {deviceType === 'laptop' && 'Laptop Console'}
-                      {deviceType === 'desktop' && 'Desktop Monitor'}
+                      {deviceType === 'tablet' && 'Tablet'}
+                      {deviceType === 'laptop' && 'Laptop'}
+                      {deviceType === 'desktop' && 'Desktop'}
                       {deviceType === 'large' && 'Large Display'}
                     </span>
                   </div>
@@ -2623,11 +2623,11 @@ export default function App() {
                 <button
                   id="btn-notif-toggle"
                   onClick={() => setIsNotificationsOpen(true)}
-                  className="p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white relative transition-colors"
+                  className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white relative transition-colors"
                 >
-                  <Bell className="h-5 w-5" />
+                  <Bell className="h-4.5 w-4.5" />
                   {notifications.filter(n => n.unread).length > 0 && (
-                    <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-slate-50 dark:border-slate-950 animate-bounce" />
+                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 border border-slate-950 animate-bounce" />
                   )}
                 </button>
               </div>
@@ -2639,52 +2639,52 @@ export default function App() {
               
               {/* -------------------- SUB-VIEW: HOME DASHBOARD (wallet tab) -------------------- */}
               {currentScreen === 'dashboard' && activeTab === 'wallet' && (
-                <div className="p-5 animate-[fadeIn_0.2s_ease-out]">
-                  <div className={`gap-6 ${deviceType !== 'mobile' ? 'grid grid-cols-1 lg:grid-cols-12 items-start' : 'space-y-5'}`}>
+                <div className="p-3.5 sm:p-5 animate-[fadeIn_0.2s_ease-out]">
+                  <div className={`gap-4 ${deviceType !== 'mobile' ? 'grid grid-cols-1 lg:grid-cols-12 items-start' : 'space-y-4'}`}>
                     
                     {/* Left Column: Balance, Greeting, Services */}
-                    <div className={`${deviceType !== 'mobile' ? 'lg:col-span-7 space-y-6' : 'space-y-5'}`}>
+                    <div className={`${deviceType !== 'mobile' ? 'lg:col-span-7 space-y-4' : 'space-y-4'}`}>
                       {/* Greeting Block */}
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="text-lg font-bold font-display text-slate-800 dark:text-white">Hi, {user?.fullName.split(' ')[0] || 'Adebayo'}</h4>
-                          <p className="text-xs text-slate-400 mt-0.5">Welcome back, transact cheaper today.</p>
+                          <h4 className="text-base sm:text-lg font-bold font-display text-white">Hi, {user?.fullName.split(' ')[0] || 'Adebayo'}</h4>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Welcome back, transact cheaper today.</p>
                         </div>
                         {/* User Avatar */}
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-500 to-teal-400 p-0.5 shadow-md">
-                          <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center text-xs font-black text-white">
+                        <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-gradient-to-tr from-indigo-500 to-teal-400 p-0.5 shadow-md">
+                          <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center text-[11px] font-extrabold text-white">
                             {user?.fullName.split(' ').map(n => n[0]).join('') || 'AS'}
                           </div>
                         </div>
                       </div>
 
-                      {/* GLASSMORPHISM BALANCE CARD */}
-                      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-teal-500 p-6 text-white shadow-xl shadow-indigo-500/20">
-                        {/* Gloss glass glow elements */}
-                        <div className="absolute -right-16 -top-16 w-44 h-44 rounded-full bg-white/10 blur-2xl" />
-                        <div className="absolute -left-16 -bottom-16 w-36 h-36 rounded-full bg-teal-300/10 blur-2xl" />
+                      {/* COMPACT FINTECH BALANCE CARD */}
+                      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1e1b4b] via-[#312e81] to-[#4c1d95] p-4 sm:p-5 text-white border border-indigo-500/20 shadow-lg shadow-indigo-950/40">
+                        {/* Subtle background glow elements */}
+                        <div className="absolute -right-12 -top-12 w-32 h-32 rounded-full bg-teal-400/10 blur-xl" />
+                        <div className="absolute -left-12 -bottom-12 w-28 h-28 rounded-full bg-indigo-400/10 blur-xl" />
 
                         <div className="relative z-10 flex items-center justify-between">
-                          <span className="text-[10px] tracking-widest uppercase font-mono text-indigo-100">Available Balance</span>
-                          <span className="text-[10px] tracking-wide font-mono px-2 py-0.5 bg-white/20 rounded-full">Basic Tier</span>
+                          <span className="text-[9px] sm:text-[10px] tracking-widest uppercase font-mono text-indigo-200">Available Balance</span>
+                          <span className="text-[9px] font-mono px-2 py-0.5 bg-white/10 rounded-full border border-white/10 text-teal-300 font-bold">Basic Tier</span>
                         </div>
 
-                        <div className="relative z-10 my-4">
-                          <span className="text-3xl font-bold font-display tracking-tight">
+                        <div className="relative z-10 my-2">
+                          <span className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
                             {nairaFormat(user?.balance || 200000)}
                           </span>
                         </div>
 
-                        <div className="relative z-10 border-t border-white/20 pt-4 flex items-center justify-between gap-4">
+                        <div className="relative z-10 border-t border-white/10 pt-3 flex items-center justify-between gap-3">
                           <div className="flex-1">
-                            <div className="flex items-center justify-between text-[10px] text-indigo-100 mb-1.5 font-mono">
+                            <div className="flex items-center justify-between text-[9px] text-indigo-200 mb-1 font-mono">
                               <span>Daily Spend Target</span>
                               <span>{nairaFormat(user?.dailySpent || 0)} / {nairaFormat(user?.dailyTarget || 50000)}</span>
                             </div>
                             {/* Progress Bar */}
-                            <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+                            <div className="w-full h-1 bg-white/15 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-teal-300 transition-all duration-500"
+                                className="h-full bg-teal-400 transition-all duration-500"
                                 style={{ width: `${Math.min(100, ((user?.dailySpent || 0) / (user?.dailyTarget || 50000)) * 100)}%` }}
                               />
                             </div>
@@ -2694,7 +2694,7 @@ export default function App() {
                           <button
                             id="btn-withdraw-trigger"
                             onClick={() => setIsWithdrawOpen(true)}
-                            className="py-2.5 px-4 rounded-xl bg-white text-indigo-600 hover:bg-slate-100 text-xs font-bold shadow-sm active:scale-95 transition-all shrink-0"
+                            className="py-1.5 px-3 rounded-lg bg-teal-400 hover:bg-teal-300 text-slate-950 text-[11px] font-bold shadow-sm active:scale-95 transition-all shrink-0"
                           >
                             Withdraw
                           </button>
@@ -2703,13 +2703,13 @@ export default function App() {
 
                       {/* QUICK ACTIONS GRID (4 Circle Icons) */}
                       <div>
-                        <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3.5">Quick Actions</h5>
-                        <div className="grid grid-cols-4 gap-3.5">
+                        <h5 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">Quick Actions</h5>
+                        <div className="grid grid-cols-4 gap-2.5 sm:gap-3">
                           {[
-                            { id: 'social', label: 'Platform', icon: MessageSquare, bg: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400' },
-                            { id: 'wdv', label: 'Buy WDV', icon: CreditCard, bg: 'bg-teal-500/10 text-teal-600 dark:bg-teal-500/15 dark:text-teal-400' },
-                            { id: 'guide', label: 'Watch Guide', icon: Clock, bg: 'bg-violet-500/10 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400' },
-                            { id: 'airtime', label: 'Airtime', icon: Smartphone, bg: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400' }
+                            { id: 'social', label: 'Platform', icon: MessageSquare, bg: 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20' },
+                            { id: 'wdv', label: 'Buy WDV', icon: CreditCard, bg: 'bg-teal-500/15 text-teal-400 border border-teal-500/20' },
+                            { id: 'guide', label: 'Watch Guide', icon: Clock, bg: 'bg-violet-500/15 text-violet-400 border border-violet-500/20' },
+                            { id: 'airtime', label: 'Airtime', icon: Smartphone, bg: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' }
                           ].map((act) => (
                             <button
                               id={`btn-action-${act.id}`}
@@ -2727,10 +2727,10 @@ export default function App() {
                               }}
                               className="flex flex-col items-center group cursor-pointer"
                             >
-                              <div className={`h-12 w-12 rounded-2xl flex items-center justify-center border border-transparent dark:border-white/5 shadow-sm mb-2 transition-all group-hover:scale-105 active:scale-95 ${act.bg}`}>
-                                <act.icon className="h-5 w-5" />
+                              <div className={`h-10 w-10 sm:h-11 sm:w-11 rounded-xl flex items-center justify-center shadow-sm mb-1.5 transition-all group-hover:scale-105 active:scale-95 ${act.bg}`}>
+                                <act.icon className="h-4 w-4" />
                               </div>
-                              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 text-center">
+                              <span className="text-[10px] font-medium text-slate-300 text-center">
                                 {act.label}
                               </span>
                             </button>
@@ -2740,13 +2740,13 @@ export default function App() {
 
                       {/* MORE SERVICES GRID (4 columns) */}
                       <div>
-                        <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3.5">More Services</h5>
-                        <div className="grid grid-cols-4 gap-3">
+                        <h5 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">More Services</h5>
+                        <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
                           {[
-                            { id: 'data', label: 'Data bundles', icon: Smartphone, bg: 'bg-orange-500/10 text-orange-500' },
-                            { id: 'bills', label: 'Pay Bills', icon: CreditCard, bg: 'bg-emerald-500/10 text-emerald-500' },
-                            { id: 'support', label: 'Support Chat', icon: MessageSquare, bg: 'bg-rose-500/10 text-rose-500' },
-                            { id: 'about', label: 'About App', icon: Info, bg: 'bg-blue-500/10 text-blue-500' }
+                            { id: 'data', label: 'Data bundles', icon: Smartphone, bg: 'bg-orange-500/15 text-orange-400' },
+                            { id: 'bills', label: 'Pay Bills', icon: CreditCard, bg: 'bg-emerald-500/15 text-emerald-400' },
+                            { id: 'support', label: 'Support Chat', icon: MessageSquare, bg: 'bg-rose-500/15 text-rose-400' },
+                            { id: 'about', label: 'About App', icon: Info, bg: 'bg-blue-500/15 text-blue-400' }
                           ].map((srv) => (
                             <button
                               id={`btn-service-${srv.id}`}
@@ -2762,12 +2762,12 @@ export default function App() {
                                   setCurrentScreen('about_info');
                                 }
                               }}
-                              className="p-3 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex flex-col items-center hover:bg-white/60 dark:hover:bg-slate-900/80 active:scale-95 transition-all text-center w-full"
+                              className="p-2 sm:p-2.5 rounded-xl bg-[#0a0a14] border border-white/5 hover:border-white/15 flex flex-col items-center hover:bg-[#10101f] active:scale-95 transition-all text-center w-full shadow-sm"
                             >
-                              <div className={`p-2 rounded-xl mb-1.5 ${srv.bg}`}>
-                                <srv.icon className="h-4.5 w-4.5" />
+                              <div className={`p-1.5 rounded-lg mb-1 ${srv.bg}`}>
+                                <srv.icon className="h-4 w-4" />
                               </div>
-                              <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase leading-none">
+                              <span className="text-[9px] font-bold text-slate-300 uppercase leading-none">
                                 {srv.label.split(' ')[0]}
                               </span>
                             </button>
@@ -2777,17 +2777,17 @@ export default function App() {
                     </div>
 
                     {/* Right Column: Active Vouchers, Recent Transactions */}
-                    <div className={`${deviceType !== 'mobile' ? 'lg:col-span-5 space-y-6 mt-6 lg:mt-0' : 'space-y-5'}`}>
+                    <div className={`${deviceType !== 'mobile' ? 'lg:col-span-5 space-y-4 mt-4 lg:mt-0' : 'space-y-4'}`}>
                       {/* RECENT WDV VOUCHERS LIST */}
                       {vouchers.length > 0 && (
                         <div>
-                          <div className="flex items-center justify-between mb-3.5">
-                            <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">My Active WDV Codes</h5>
-                            <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-teal-400">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">My Active WDV Codes</h5>
+                            <span className="text-[10px] font-mono font-bold text-teal-400">
                               {vouchers.filter(v => v.status === 'unused').length} Unused
                             </span>
                           </div>
-                          <div className="space-y-3.5">
+                          <div className="space-y-2.5">
                             {vouchers.map(vouch => (
                               <WdvVoucher
                                 key={vouch.id}
@@ -2801,13 +2801,13 @@ export default function App() {
                       )}
 
                       {/* RECENT TRANSACTIONS PREVIEW */}
-                      <div className="pt-2">
-                        <div className="flex items-center justify-between mb-3.5">
-                          <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">Recent Transactions</h5>
+                      <div className="pt-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Recent Transactions</h5>
                           <button
                             id="btn-view-all-tx"
                             onClick={() => setCurrentScreen('transactions_all')}
-                            className="text-[10px] font-bold text-indigo-600 dark:text-teal-400 hover:underline"
+                            className="text-[10px] font-bold text-teal-400 hover:underline"
                           >
                             View All
                           </button>

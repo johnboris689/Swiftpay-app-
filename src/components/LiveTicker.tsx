@@ -39,7 +39,7 @@ export default function LiveTicker() {
   }, []);
 
   return (
-    <div id="live-withdrawal-news-ticker" className="w-full bg-[#11111e]/90 border-b border-white/5 py-2 overflow-hidden flex items-center relative z-20 select-none shrink-0 font-sans">
+    <div id="live-withdrawal-news-ticker" className="w-full bg-[#0a0a12] border-b border-white/[0.06] py-1 overflow-hidden flex items-center relative z-20 select-none shrink-0 font-sans">
       <style>{`
         @keyframes tickerMarquee {
           0% { transform: translateX(100%); }
@@ -54,17 +54,17 @@ export default function LiveTicker() {
       `}</style>
       
       {/* Static "LIVE" Badge */}
-      <div className="bg-red-500/10 text-red-400 border-r border-white/5 px-3 flex items-center gap-1.5 shrink-0 z-30 text-[10px] font-bold font-mono tracking-wider uppercase bg-[#0c0c14] h-full">
-        <span className="relative flex h-2 w-2">
+      <div className="bg-red-500/10 text-red-400 border-r border-white/5 px-2.5 py-0.5 flex items-center gap-1.5 shrink-0 z-30 text-[9px] font-bold font-mono tracking-wider uppercase bg-[#0c0c14] h-full">
+        <span className="relative flex h-1.5 w-1.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
         </span>
-        LIVE FEED
+        LIVE
       </div>
 
       {/* Scrolling Text Container */}
       <div className="flex-1 overflow-hidden relative flex items-center">
-        <div className="animate-ticker text-xs font-mono text-teal-400 tracking-wide font-bold">
+        <div className="animate-ticker text-[10px] sm:text-[11px] font-mono text-teal-400 tracking-wide font-medium">
           {currentText}
         </div>
       </div>

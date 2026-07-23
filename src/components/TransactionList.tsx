@@ -129,11 +129,11 @@ export default function TransactionList({
       )}
 
       {displayedTransactions.length === 0 ? (
-        <div className="text-center py-8 bg-white/30 dark:bg-slate-900/10 rounded-2xl border border-dashed border-slate-200/60 dark:border-slate-800/60">
+        <div className="text-center py-6 bg-white/[0.02] rounded-xl border border-dashed border-white/10">
           <p className="text-xs text-slate-400">No transactions match your search</p>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-1.5">
           {displayedTransactions.map((tx) => {
             const style = getIcon(tx.type);
             const IconComponent = style.icon;
@@ -144,28 +144,28 @@ export default function TransactionList({
                 id={`tx-row-${tx.id}`}
                 key={tx.id}
                 onClick={() => onViewDetails && onViewDetails(tx)}
-                className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 dark:border-slate-800/40 dark:hover:border-slate-800 bg-white/40 dark:bg-slate-950/15 hover:bg-slate-50/50 dark:hover:bg-slate-950/30 transition-all cursor-pointer group"
+                className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-white/5 bg-[#0a0a14] hover:bg-[#10101f] hover:border-white/10 transition-all cursor-pointer group shadow-sm active:scale-[0.99]"
               >
-                <div className="flex items-center gap-3.5">
-                  <div className={`p-2.5 rounded-xl border ${style.bg} shrink-0 group-hover:scale-105 transition-all`}>
-                    <IconComponent className="h-4.5 w-4.5" />
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`p-2 rounded-lg border ${style.bg} shrink-0 group-hover:scale-105 transition-transform`}>
+                    <IconComponent className="h-3.5 w-3.5" />
                   </div>
-                  <div>
-                    <h5 className="text-xs font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-teal-400 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <h5 className="text-[11px] sm:text-xs font-bold text-slate-200 group-hover:text-indigo-400 dark:group-hover:text-teal-400 transition-colors truncate leading-tight">
                       {tx.description}
                     </h5>
-                    <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
+                    <span className="text-[9px] text-slate-400 font-mono mt-0.5 block">
                       {new Date(tx.date).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                 </div>
 
-                <div className="text-right">
+                <div className="text-right shrink-0 ml-3">
                   <span
-                    className={`text-xs font-bold font-mono ${
+                    className={`text-xs font-extrabold font-mono ${
                       isIncoming
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-slate-800 dark:text-slate-100'
+                        ? 'text-emerald-400'
+                        : 'text-slate-100'
                     }`}
                   >
                     {isIncoming ? '+' : '-'}
@@ -173,7 +173,7 @@ export default function TransactionList({
                   </span>
                   
                   {tx.wdvCodeGenerated && (
-                    <span className="text-[9px] font-bold font-mono text-indigo-500 dark:text-teal-400 bg-indigo-500/10 dark:bg-teal-500/10 px-1.5 py-0.5 rounded block mt-1 uppercase">
+                    <span className="text-[8px] font-bold font-mono text-teal-400 bg-teal-500/10 border border-teal-500/20 px-1 py-0.2 rounded block mt-0.5 uppercase">
                       Code Issued
                     </span>
                   )}
