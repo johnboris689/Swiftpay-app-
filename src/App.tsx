@@ -659,7 +659,7 @@ export default function App() {
   }, []);
 
   const getContainerClasses = () => {
-    return "w-full h-screen h-[100dvh] max-h-[100dvh] bg-[#0c0c14] relative flex flex-col overflow-hidden transition-colors duration-300";
+    return "w-full min-h-screen bg-[#0c0c14] relative flex flex-col transition-colors duration-300";
   };
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -2280,7 +2280,7 @@ export default function App() {
         />
       )}
       {/* Full-Screen Edge-to-Edge Container */}
-      <div className="w-full h-screen h-[100dvh] max-h-[100dvh] bg-[#0c0c14] text-white flex flex-col font-sans overflow-hidden">
+      <div className="w-full min-h-screen bg-[#0c0c14] text-white flex flex-col font-sans">
         {/* Main Core Viewport Container */}
         <div
           id="swiftpay-mobile-container"
@@ -2736,11 +2736,11 @@ export default function App() {
 
         {/* -------------------- MAIN DASHBOARD WRAPPER -------------------- */}
         {isAuthenticated && currentScreen !== 'congratulations' && (
-          <div className="flex-1 flex flex-row h-full relative overflow-hidden bg-[#0c0c14] text-white">
+          <div className="flex-1 flex flex-row min-h-screen relative bg-[#0c0c14] text-white">
             
             {/* Expanded Persistent Sidebar for Tablets, Laptops, Desktops, and Large Screens */}
             {(deviceType === 'laptop' || deviceType === 'desktop' || deviceType === 'large') && (
-              <div className="w-[260px] shrink-0 border-r border-white/5 bg-[#07070b]/60 backdrop-blur-md p-5 flex flex-col justify-between z-20">
+              <div className="w-[260px] shrink-0 border-r border-white/5 bg-[#07070b]/60 backdrop-blur-md p-5 flex flex-col justify-between z-20 sticky top-0 h-screen">
                 <div className="space-y-6">
                   <div className="flex items-center justify-between border-b border-white/5 pb-4">
                     <div>
@@ -2801,7 +2801,7 @@ export default function App() {
             )}
 
             {/* Main view container containing top-bar and actual tab routes */}
-            <div className="flex-1 flex flex-col h-full min-h-0 relative overflow-hidden bg-[#0c0c14]">
+            <div className="flex-1 flex flex-col min-h-screen relative bg-[#0c0c14]">
               {/* Fixed Top Header (Never Scroll) */}
               <div className="shrink-0 z-30 bg-[#0c0c14]/95 backdrop-blur-xl border-b border-white/5 sticky top-0 w-full pt-safe">
                 <div className="px-4 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between">
@@ -2849,7 +2849,7 @@ export default function App() {
               </div>
 
             {/* Main scrollable view containers based on Current Screen & Tab */}
-            <div className="flex-1 overflow-y-auto min-h-0 no-scrollbar pb-6 focus:outline-none">
+            <div className="flex-1 w-full pb-20 focus:outline-none">
               
               {/* -------------------- SUB-VIEW: HOME DASHBOARD (wallet tab) -------------------- */}
               {currentScreen === 'dashboard' && activeTab === 'wallet' && (
@@ -4935,7 +4935,7 @@ export default function App() {
 
               {/* -------------------- VIEW 3.7: SECURITY AUDITS / DEVICES (Point 1) -------------------- */}
               {currentScreen === 'security_audits' && (
-                <div className="animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-full min-h-[500px] no-scrollbar pb-10">
+                <div className="animate-[fadeIn_0.2s_ease-out] w-full min-h-screen pb-10">
                   <DevicesHistory
                     devices={devices}
                     onLogoutDevice={(id) => {
@@ -4957,7 +4957,7 @@ export default function App() {
 
               {/* -------------------- VIEW 3.8: ADMIN PANEL (Point 10) -------------------- */}
               {(currentScreen === 'admin' || currentScreen === 'admin_dashboard') && (
-                <div className="animate-[fadeIn_0.2s_ease-out] overflow-y-auto h-full min-h-[500px] no-scrollbar pb-10">
+                <div className="animate-[fadeIn_0.2s_ease-out] w-full min-h-screen pb-10">
                   <AdminPanel
                     currentUserEmail={user?.email || 'admin@swiftpay.com'}
                     transactions={transactions}
