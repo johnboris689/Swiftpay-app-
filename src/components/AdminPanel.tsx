@@ -24,8 +24,13 @@ export default function AdminPanel({
   adminPath,
   navigateTo
 }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'voucher_generator' | 'withdrawals' | 'users' | 'settings' | 'logs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'voucher_generator' | 'payments' | 'withdrawals' | 'users' | 'settings' | 'logs'>('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // WDV Virtual Payments State
+  const [payments, setPayments] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [paymentSearch, setPaymentSearch] = useState('');
   
   // Withdrawal Management System State
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
@@ -325,7 +330,47 @@ export default function AdminPanel({
     fetchAdminSettings();
     fetchVouchers();
     fetchWithdrawals();
+    fetchPayments();
   }, []);
+
+  const fetchPayments = async () => {
+    setLoadingPayments(true);
+    try {
+      const res = await fetch('/api/admin/payments', {
+        headers: getAdminHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPayments(data.payments || []);
+      } else {
+        onToast('Failed to fetch virtual account payments', 'error');
+      }
+    } catch (err) {
+      console.error('Error fetching payments:', err);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  const handleAdminConfirmPayment = async (reference: string) => {
+    try {
+      const res = await fetch('/api/admin/payments/confirm', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ reference })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onToast(`Payment ${reference} verified! Voucher generated: ${data.voucherCode}`, 'success');
+        fetchPayments();
+        fetchVouchers();
+      } else {
+        onToast(data.error || 'Failed to confirm payment', 'error');
+      }
+    } catch (err) {
+      onToast('Network error confirming payment', 'error');
+    }
+  };
 
   // Fetch all withdrawal requests
   const fetchWithdrawals = async () => {
@@ -1380,6 +1425,28 @@ export default function AdminPanel({
 
           <button
             onClick={() => {
+              setActiveTab('payments');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full text-left px-3 py-2 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 justify-between transition-all cursor-pointer ${
+              activeTab === 'payments'
+                ? 'bg-gradient-to-r from-teal-500/15 to-indigo-500/15 border border-teal-500/30 text-teal-400'
+                : 'border border-transparent hover:bg-white/5 text-slate-400 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-3.5 w-3.5 text-teal-400" />
+              Virtual Account Payments
+            </div>
+            {payments.filter(p => p.status === 'pending').length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-teal-500/20 text-teal-400 text-[9px] font-mono font-bold animate-pulse">
+                {payments.filter(p => p.status === 'pending').length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
               setActiveTab('withdrawals');
               setMobileMenuOpen(false);
             }}
@@ -2078,6 +2145,143 @@ export default function AdminPanel({
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </button>
                                 </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </GlassCard>
+            </div>
+          )}
+
+          {activeTab === 'payments' && (
+            <div className="space-y-6 animate-[fadeIn_0.2s_ease-out]">
+              <GlassCard className="p-5 border-white/5 space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
+                  <div>
+                    <h5 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
+                      <CreditCard className="h-4 w-4 text-teal-400" />
+                      Virtual Account Payments Log
+                    </h5>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Real-time tracking of auto-generated virtual accounts, payment references, and voucher issuances</p>
+                  </div>
+
+                  <button
+                    onClick={fetchPayments}
+                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-teal-400 border border-white/10 rounded-xl text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                  >
+                    <RefreshCw className="h-3 w-3 animate-spin" /> Sync Payments
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 justify-between">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      placeholder="Search reference, email, account or bank..."
+                      value={paymentSearch}
+                      onChange={(e) => setPaymentSearch(e.target.value)}
+                      className="w-full text-xs bg-slate-950 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono"
+                    />
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400 self-center">
+                    Total Records: {payments.length}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20 no-scrollbar">
+                  <table className="w-full text-[11px] text-left border-collapse font-mono">
+                    <thead>
+                      <tr className="border-b border-white/5 text-[9px] text-slate-400 uppercase tracking-wider bg-white/[0.02]">
+                        <th className="px-3 py-3 font-bold">Reference</th>
+                        <th className="px-3 py-3 font-bold">User Email</th>
+                        <th className="px-3 py-3 font-bold">Amount</th>
+                        <th className="px-3 py-3 font-bold">Virtual Account</th>
+                        <th className="px-3 py-3 font-bold">Status</th>
+                        <th className="px-3 py-3 font-bold">Voucher Code</th>
+                        <th className="px-3 py-3 font-bold text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {loadingPayments ? (
+                        <tr>
+                          <td colSpan={7} className="text-center py-8 text-slate-400 text-xs font-sans">
+                            <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-2 text-teal-400" />
+                            Loading virtual account payment logs...
+                          </td>
+                        </tr>
+                      ) : payments.filter(p => {
+                          const term = paymentSearch.toLowerCase().trim();
+                          if (!term) return true;
+                          return (p.reference || '').toLowerCase().includes(term) ||
+                                 (p.userEmail || '').toLowerCase().includes(term) ||
+                                 (p.bankName || '').toLowerCase().includes(term) ||
+                                 (p.accountNumber || '').toLowerCase().includes(term) ||
+                                 (p.voucherCode || '').toLowerCase().includes(term);
+                        }).length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="text-center py-8 text-slate-500 text-xs font-sans">
+                            No payment records found.
+                          </td>
+                        </tr>
+                      ) : (
+                        payments.filter(p => {
+                          const term = paymentSearch.toLowerCase().trim();
+                          if (!term) return true;
+                          return (p.reference || '').toLowerCase().includes(term) ||
+                                 (p.userEmail || '').toLowerCase().includes(term) ||
+                                 (p.bankName || '').toLowerCase().includes(term) ||
+                                 (p.accountNumber || '').toLowerCase().includes(term) ||
+                                 (p.voucherCode || '').toLowerCase().includes(term);
+                        }).map((p) => {
+                          const isSuccessful = p.status === 'successful' || p.status === 'settled';
+                          const isPending = p.status === 'pending';
+                          return (
+                            <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
+                              <td className="px-3 py-3 text-teal-300 font-bold text-[10px]">
+                                {p.reference}
+                              </td>
+                              <td className="px-3 py-3 text-slate-300 text-[10px]">
+                                {p.userEmail}
+                              </td>
+                              <td className="px-3 py-3 text-emerald-400 font-bold">
+                                ₦{Number(p.amount || 0).toLocaleString()}
+                              </td>
+                              <td className="px-3 py-3 text-slate-300 text-[10px]">
+                                <div>{p.bankName}</div>
+                                <div className="text-slate-400 text-[9px]">{p.accountNumber}</div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                  isSuccessful ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                  isPending ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse' :
+                                  'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                }`}>
+                                  {p.status}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-teal-300 font-bold text-[10px]">
+                                {p.voucherCode ? (
+                                  <span className="bg-teal-500/10 text-teal-300 px-2 py-0.5 rounded border border-teal-500/20">
+                                    {p.voucherCode}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500">-</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 text-right">
+                                {!isSuccessful && (
+                                  <button
+                                    onClick={() => handleAdminConfirmPayment(p.reference)}
+                                    className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded text-[9px] font-bold uppercase transition-all cursor-pointer"
+                                  >
+                                    Verify & Issue Voucher
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );

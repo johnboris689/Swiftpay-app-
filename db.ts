@@ -29,6 +29,7 @@ interface JsonData {
   logs: any[];
   admins: any[];
   withdraw_requests: any[];
+  wdv_payments: any[];
 }
 
 // -------------------- JSON DATABASE ENGINE FALLBACK --------------------
@@ -108,7 +109,8 @@ function getJsonDb(): JsonData {
           passwordhash: secureAdminPasswordHash
         }
       ],
-      withdraw_requests: []
+      withdraw_requests: [],
+      wdv_payments: []
     };
     fs.writeFileSync(JSON_FILE, JSON.stringify(initial, null, 2));
     return initial;
@@ -188,6 +190,22 @@ function getJsonDb(): JsonData {
         adminNotes: w.adminNotes || w.adminnotes || '',
         posSlipPath: w.posSlipPath || w.posslippath || '',
         posSlipUploadedAt: w.posSlipUploadedAt || w.posslipuploadedat || ''
+      })),
+      wdv_payments: (parsed.wdv_payments || parsed.wdvPayments || []).map((p: any) => ({
+        id: p.id || '',
+        reference: p.reference || '',
+        userEmail: (p.userEmail || p.useremail || '').toLowerCase(),
+        amount: Number(p.amount || 0),
+        bankName: p.bankName || p.bankname || '',
+        accountNumber: p.accountNumber || p.accountnumber || '',
+        accountName: p.accountName || p.accountname || '',
+        status: p.status || 'pending',
+        createdAt: p.createdAt || p.createdat || new Date().toISOString(),
+        expiresAt: p.expiresAt || p.expiresat || '',
+        paidAt: p.paidAt || p.paidat || '',
+        voucherCode: p.voucherCode || p.vouchercode || '',
+        provider: p.provider || 'virtual_account',
+        webhookData: p.webhookData || p.webhookdata || ''
       }))
     };
 
@@ -234,7 +252,8 @@ function getJsonDb(): JsonData {
       admin_settings: {},
       logs: [],
       admins: [],
-      withdraw_requests: []
+      withdraw_requests: [],
+      wdv_payments: []
     };
   }
 }
@@ -453,6 +472,25 @@ export async function initDb() {
   `);
 
   // Extra tables required by server
+  await execute(`
+    CREATE TABLE IF NOT EXISTS wdv_payments (
+      id TEXT PRIMARY KEY,
+      reference TEXT UNIQUE,
+      userEmail TEXT,
+      amount REAL,
+      bankName TEXT,
+      accountNumber TEXT,
+      accountName TEXT,
+      status TEXT,
+      createdAt TEXT,
+      expiresAt TEXT,
+      paidAt TEXT,
+      voucherCode TEXT,
+      provider TEXT,
+      webhookData TEXT
+    )
+  `);
+
   await execute(`
     CREATE TABLE IF NOT EXISTS vouchers (
       id TEXT PRIMARY KEY,
@@ -720,6 +758,41 @@ export function execute(sql: string, params: any[] = []): Promise<any> {
           };
           db.vouchers = db.vouchers.filter(x => x.code !== v.code);
           db.vouchers.push(v);
+        } else if (sqlUpper.includes('INSERT INTO WDV_PAYMENTS')) {
+          const p = {
+            id: params[0],
+            reference: params[1],
+            useremail: (params[2] || '').toLowerCase(),
+            amount: Number(params[3] ?? 0),
+            bankname: params[4],
+            accountnumber: params[5],
+            accountname: params[6],
+            status: params[7] || 'pending',
+            createdat: params[8] || new Date().toISOString(),
+            expiresat: params[9] || '',
+            paidat: params[10] || '',
+            vouchercode: params[11] || '',
+            provider: params[12] || 'virtual_account',
+            webhookdata: params[13] || ''
+          };
+          db.wdv_payments = db.wdv_payments || [];
+          db.wdv_payments = db.wdv_payments.filter((x: any) => x.reference !== p.reference && x.id !== p.id);
+          db.wdv_payments.push(p);
+        } else if (sqlUpper.includes('UPDATE WDV_PAYMENTS')) {
+          db.wdv_payments = db.wdv_payments || [];
+          const refParam = params[params.length - 1]; // reference is usually last param
+          const p = db.wdv_payments.find((x: any) => x.reference === refParam || x.id === refParam);
+          if (p) {
+            if (sqlUpper.includes('STATUS =') || sqlUpper.includes('STATUS=')) {
+              p.status = params[0];
+            }
+            if (sqlUpper.includes('PAIDAT =') || sqlUpper.includes('PAIDAT=')) {
+              p.paidat = params[1] || new Date().toISOString();
+            }
+            if (sqlUpper.includes('VOUCHERCODE =') || sqlUpper.includes('VOUCHERCODE=')) {
+              p.vouchercode = params[2] || params[1] || '';
+            }
+          }
         } else if (sqlUpper.includes('INSERT INTO WITHDRAW_REQUESTS')) {
           const w = {
             id: params[0],
@@ -847,6 +920,12 @@ export function getRow(sql: string, params: any[] = []): Promise<any> {
           const row = db.withdraw_requests.find((w: any) => w.id === idVal);
           return resolve(row || null);
         }
+        if (sqlUpper.includes('FROM WDV_PAYMENTS WHERE REFERENCE')) {
+          db.wdv_payments = db.wdv_payments || [];
+          const refVal = params[0];
+          const row = db.wdv_payments.find((p: any) => p.reference === refVal || p.id === refVal);
+          return resolve(row || null);
+        }
         
         resolve(null);
       } catch (err) {
@@ -890,6 +969,10 @@ export function getAllRows(sql: string, params: any[] = []): Promise<any[]> {
         if (sqlUpper.includes('FROM WITHDRAW_REQUESTS')) {
           db.withdraw_requests = db.withdraw_requests || [];
           return resolve(db.withdraw_requests);
+        }
+        if (sqlUpper.includes('FROM WDV_PAYMENTS')) {
+          db.wdv_payments = db.wdv_payments || [];
+          return resolve(db.wdv_payments);
         }
 
         resolve([]);

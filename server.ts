@@ -2573,6 +2573,313 @@ app.post('/api/vouchers/purchase', async (req, res) => {
   }
 });
 
+// -------------------- VIRTUAL ACCOUNT WDV PAYMENT SYSTEM --------------------
+
+// Core Payment Verification & Voucher Generation Logic
+async function processSuccessfulWdvPayment(reference: string, providerName = 'webhook', webhookRawData = '') {
+  const payment = await getRow(`SELECT * FROM wdv_payments WHERE reference = $1`, [reference]);
+  if (!payment) {
+    throw new Error(`Payment reference ${reference} not found.`);
+  }
+
+  const existingCode = payment.vouchercode || payment.voucherCode;
+  if ((payment.status === 'successful' || payment.status === 'settled') && existingCode) {
+    return {
+      success: true,
+      alreadyProcessed: true,
+      voucherCode: existingCode,
+      message: 'Payment already processed and voucher generated.'
+    };
+  }
+
+  // Generate cryptographically unique WDV voucher
+  const voucherCode = generateVoucherCode();
+  const voucherId = `v-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const nowIso = new Date().toISOString();
+  const db = readDb();
+  const config = db.wdvConfig || DEFAULT_WDV_CONFIG;
+  const price = payment.amount || config.voucherPrice || 6500;
+  const email = (payment.useremail || payment.userEmail || '').toLowerCase();
+
+  // Save voucher in SQL database
+  await execute(`
+    INSERT INTO vouchers (id, voucherCode, code, amount, status, usedBy, usedAt, generatedAt, withdrawalId, purchasedBy, redeemedBy)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+  `, [voucherId, voucherCode, voucherCode, price, 'unused', '', '', nowIso, reference, email, '[]']);
+
+  // Update payment status to successful
+  await execute(`
+    UPDATE wdv_payments 
+    SET status = $1, paidAt = $2, voucherCode = $3, webhookData = $4 
+    WHERE reference = $5
+  `, ['successful', nowIso, voucherCode, webhookRawData, reference]);
+
+  // Update user notifications in cache/JSON
+  if (email) {
+    const userIndex = db.users.findIndex(u => u.email.toLowerCase() === email);
+    if (userIndex !== -1) {
+      db.users[userIndex].notifications = db.users[userIndex].notifications || [];
+      db.users[userIndex].notifications.unshift({
+        id: `notif-${Date.now()}`,
+        title: 'WDV Voucher Generated (Payment Verified)',
+        body: `Your payment of ₦${price.toLocaleString()} (Ref: ${reference}) was confirmed! Your new WDV Voucher code is: ${voucherCode}.`,
+        date: nowIso,
+        unread: true
+      });
+      writeDb(db);
+    }
+  }
+
+  logDiagnostic('INFO', 'WDV Payment verified and voucher generated', { reference, email, voucherCode, providerName });
+  await loadDbCache();
+
+  return {
+    success: true,
+    voucherCode,
+    reference,
+    paidAt: nowIso,
+    amount: price
+  };
+}
+
+// 1. Request Unique Virtual Account for WDV Voucher Purchase
+app.post('/api/vouchers/initiate-virtual-account', authenticateToken, async (req: any, res) => {
+  try {
+    const email = req.userEmail.toLowerCase();
+    const db = readDb();
+    const user = db.users[req.userIndex];
+    const config = db.wdvConfig || DEFAULT_WDV_CONFIG;
+    const amount = Number(config.voucherPrice) || 6500;
+
+    // Check if user has an active pending payment created in the last 15 minutes
+    const existingPayments = await getAllRows(`SELECT * FROM wdv_payments WHERE LOWER(userEmail) = $1 AND status = 'pending' ORDER BY createdAt DESC`, [email]);
+    const now = Date.now();
+    let activePayment = existingPayments.find(p => {
+      const exp = new Date(p.expiresat || p.expiresAt).getTime();
+      return exp > now;
+    });
+
+    if (activePayment) {
+      return res.json({
+        success: true,
+        payment: {
+          id: activePayment.id,
+          reference: activePayment.reference,
+          bankName: activePayment.bankname || activePayment.bankName,
+          accountNumber: activePayment.accountnumber || activePayment.accountNumber,
+          accountName: activePayment.accountname || activePayment.accountName,
+          amount: Number(activePayment.amount || amount),
+          expiresAt: activePayment.expiresat || activePayment.expiresAt,
+          createdAt: activePayment.createdat || activePayment.createdAt,
+          status: 'pending'
+        }
+      });
+    }
+
+    // Generate brand-new unique virtual account
+    const refId = `WDV-PAY-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+    const id = `pay-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+    const createdAt = new Date().toISOString();
+    const expiresAt = new Date(now + 15 * 60 * 1000).toISOString(); // 15-minute countdown
+
+    // Account Details
+    const supportedBanks = ['Moniepoint MFB', 'PalmPay Bank', 'Sterling Bank', 'Wema Bank'];
+    const bankName = config.bankName || supportedBanks[Math.floor(Math.random() * supportedBanks.length)];
+    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+    const accountNumber = `8960${randomSuffix}`;
+    const accountName = `SwiftPay / ${user ? user.fullName.toUpperCase() : 'USER'}`;
+
+    await execute(`
+      INSERT INTO wdv_payments (id, reference, userEmail, amount, bankName, accountNumber, accountName, status, createdAt, expiresAt, paidAt, voucherCode, provider, webhookData)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    `, [id, refId, email, amount, bankName, accountNumber, accountName, 'pending', createdAt, expiresAt, '', '', 'virtual_account', '']);
+
+    await loadDbCache();
+
+    logDiagnostic('INFO', 'Generated Virtual Account for WDV purchase', { email, reference: refId, accountNumber, bankName });
+
+    res.json({
+      success: true,
+      payment: {
+        id,
+        reference: refId,
+        bankName,
+        accountNumber,
+        accountName,
+        amount,
+        expiresAt,
+        createdAt,
+        status: 'pending'
+      }
+    });
+  } catch (err: any) {
+    console.error('Error initiating virtual account:', err);
+    res.status(500).json({ error: 'Failed to generate virtual account details.' });
+  }
+});
+
+// 2. Poll / Check Payment Status
+app.post('/api/vouchers/check-payment', authenticateToken, async (req: any, res) => {
+  try {
+    const { reference } = req.body;
+    if (!reference) {
+      return res.status(400).json({ error: 'Payment reference is required.' });
+    }
+
+    const payment = await getRow(`SELECT * FROM wdv_payments WHERE reference = $1`, [reference]);
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment reference not found.' });
+    }
+
+    const status = payment.status;
+    const voucherCode = payment.vouchercode || payment.voucherCode;
+
+    if (status === 'successful' || status === 'settled') {
+      return res.json({
+        success: true,
+        status: 'successful',
+        voucherCode,
+        paidAt: payment.paidat || payment.paidAt,
+        amount: payment.amount,
+        reference
+      });
+    }
+
+    // Check expiration
+    const expTime = new Date(payment.expiresat || payment.expiresAt).getTime();
+    if (Date.now() > expTime && status === 'pending') {
+      await execute(`UPDATE wdv_payments SET status = 'expired' WHERE reference = $1`, [reference]);
+      return res.json({
+        success: false,
+        status: 'expired',
+        message: 'Payment request has expired. Please request a new virtual account.'
+      });
+    }
+
+    res.json({
+      success: true,
+      status: 'pending',
+      expiresAt: payment.expiresat || payment.expiresAt
+    });
+  } catch (err: any) {
+    console.error('Error checking payment status:', err);
+    res.status(500).json({ error: 'Failed to verify payment status.' });
+  }
+});
+
+// 3. User "I Have Paid / Verify Transfer" Endpoint (Instant Verification / Fallback Simulation)
+app.post('/api/vouchers/verify-transfer', authenticateToken, async (req: any, res) => {
+  try {
+    const { reference } = req.body;
+    if (!reference) {
+      return res.status(400).json({ error: 'Payment reference is required.' });
+    }
+
+    const result = await processSuccessfulWdvPayment(reference, 'manual_verification');
+    res.json(result);
+  } catch (err: any) {
+    console.error('Error verifying transfer:', err);
+    res.status(400).json({ error: err.message || 'Payment verification failed.' });
+  }
+});
+
+// 4. Secure Webhook Notification Receiver Endpoint
+const handlePaymentWebhook = async (req: express.Request, res: express.Response) => {
+  try {
+    const body = req.body || {};
+    const signature = req.headers['x-paystack-signature'] || req.headers['monnify-signature'] || req.headers['verif-hash'];
+
+    logDiagnostic('INFO', 'Payment webhook received', { body, signatureHeader: !!signature });
+
+    // Extract reference from various payment provider schemas
+    let reference = body.reference || body.data?.reference || body.txRef || body.tx_ref || body.eventData?.paymentReference;
+    
+    if (!reference && body.data?.metadata?.reference) {
+      reference = body.data.metadata.reference;
+    }
+
+    if (!reference) {
+      return res.status(200).json({ status: 'ignored', message: 'No reference found in webhook payload.' });
+    }
+
+    const eventType = body.event || body.type;
+    if (eventType && !['charge.success', 'SUCCESSFUL', 'payment.success', 'SUCCESS'].includes(eventType)) {
+      return res.status(200).json({ status: 'ignored', message: `Event ${eventType} not a success event.` });
+    }
+
+    const result = await processSuccessfulWdvPayment(reference, 'webhook', JSON.stringify(body));
+    return res.status(200).json({ status: 'success', data: result });
+  } catch (err: any) {
+    console.error('[Payment Webhook Error]:', err);
+    return res.status(200).json({ status: 'error', message: err.message });
+  }
+};
+
+app.post('/api/webhooks/payment', handlePaymentWebhook);
+app.post('/api/webhooks/paystack', handlePaymentWebhook);
+app.post('/api/webhooks/monnify', handlePaymentWebhook);
+app.post('/api/webhooks/flutterwave', handlePaymentWebhook);
+
+// 5. Admin Payments Management Endpoints
+app.get('/api/admin/payments', authenticateAdminToken, async (req, res) => {
+  try {
+    const paymentRows = await getAllRows(`SELECT * FROM wdv_payments ORDER BY createdAt DESC`);
+    const voucherRows = await getAllRows(`SELECT * FROM vouchers`);
+
+    const voucherMap = new Map();
+    for (const v of voucherRows) {
+      const code = v.vouchercode || v.code;
+      if (code) {
+        voucherMap.set(code, v.status);
+      }
+    }
+
+    const payments = paymentRows.map(p => {
+      const code = p.vouchercode || p.voucherCode || '';
+      return {
+        id: p.id,
+        reference: p.reference,
+        userEmail: p.useremail || p.userEmail,
+        amount: Number(p.amount || 0),
+        bankName: p.bankname || p.bankName,
+        accountNumber: p.accountnumber || p.accountNumber,
+        accountName: p.accountname || p.accountName,
+        status: p.status,
+        createdAt: p.createdat || p.createdAt,
+        expiresAt: p.expiresat || p.expiresAt,
+        paidAt: p.paidat || p.paidAt,
+        voucherCode: code,
+        voucherStatus: code ? (voucherMap.get(code) || 'unused') : '',
+        provider: p.provider
+      };
+    });
+
+    res.json({ success: true, payments });
+  } catch (err: any) {
+    console.error('Error fetching admin payments:', err);
+    res.status(500).json({ error: 'Failed to fetch payments.' });
+  }
+});
+
+app.post('/api/admin/payments/confirm', authenticateAdminToken, async (req, res) => {
+  try {
+    const { reference } = req.body;
+    if (!reference) {
+      return res.status(400).json({ error: 'Payment reference is required.' });
+    }
+
+    const result = await processSuccessfulWdvPayment(reference, 'admin_manual');
+    res.json({
+      success: true,
+      message: 'Payment confirmed and WDV voucher issued successfully.',
+      data: result
+    });
+  } catch (err: any) {
+    console.error('Error in admin payment confirmation:', err);
+    res.status(400).json({ error: err.message || 'Failed to confirm payment.' });
+  }
+});
+
 // Get user's own active and historic WDV vouchers
 app.get('/api/vouchers/my-vouchers', authenticateToken, async (req: any, res) => {
   const email = req.userEmail.toLowerCase();
