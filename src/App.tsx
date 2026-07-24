@@ -659,6 +659,9 @@ export default function App() {
   }, []);
 
   const getContainerClasses = () => {
+    if (currentScreen === 'dashboard') {
+      return "w-full h-screen h-[100dvh] max-h-[100dvh] bg-[#0c0c14] relative flex flex-col overflow-hidden transition-colors duration-300";
+    }
     return "w-full min-h-screen bg-[#0c0c14] relative flex flex-col transition-colors duration-300";
   };
 
@@ -2736,7 +2739,7 @@ export default function App() {
 
         {/* -------------------- MAIN DASHBOARD WRAPPER -------------------- */}
         {isAuthenticated && currentScreen !== 'congratulations' && (
-          <div className="flex-1 flex flex-row min-h-screen relative bg-[#0c0c14] text-white">
+          <div className={`flex-1 flex flex-row relative bg-[#0c0c14] text-white ${currentScreen === 'dashboard' ? 'h-full max-h-full overflow-hidden' : 'min-h-screen'}`}>
             
             {/* Expanded Persistent Sidebar for Tablets, Laptops, Desktops, and Large Screens */}
             {(deviceType === 'laptop' || deviceType === 'desktop' || deviceType === 'large') && (
@@ -2801,9 +2804,9 @@ export default function App() {
             )}
 
             {/* Main view container containing top-bar and actual tab routes */}
-            <div className="flex-1 flex flex-col min-h-screen relative bg-[#0c0c14]">
+            <div className={`flex-1 flex flex-col relative bg-[#0c0c14] ${currentScreen === 'dashboard' ? 'h-full max-h-full overflow-hidden' : 'min-h-screen'}`}>
               {/* Fixed Top Header (Never Scroll) */}
-              <div className="shrink-0 z-30 bg-[#0c0c14]/95 backdrop-blur-xl border-b border-white/5 sticky top-0 w-full pt-safe">
+              <div className="shrink-0 z-30 bg-[#0c0c14]/95 backdrop-blur-xl border-b border-white/5 w-full pt-safe">
                 <div className="px-4 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     {(deviceType === 'mobile' || deviceType === 'tablet') && (
@@ -2849,7 +2852,7 @@ export default function App() {
               </div>
 
             {/* Main scrollable view containers based on Current Screen & Tab */}
-            <div className="flex-1 w-full pb-20 focus:outline-none">
+            <div className={`flex-1 w-full focus:outline-none ${currentScreen === 'dashboard' ? 'overflow-y-auto min-h-0 pb-6 no-scrollbar' : 'min-h-screen pb-10'}`}>
               
               {/* -------------------- SUB-VIEW: HOME DASHBOARD (wallet tab) -------------------- */}
               {currentScreen === 'dashboard' && activeTab === 'wallet' && (
@@ -4988,16 +4991,18 @@ export default function App() {
             </div>
 
             {/* Fixed Bottom Navigation Bar (Never Scroll) */}
-            <div className="shrink-0 z-30 sticky bottom-0 w-full bg-[#0c0c14] border-t border-white/5 pb-safe">
-              <BottomNav
-                activeTab={activeTab}
-                onTabChange={(tab) => {
-                  setActiveTab(tab);
-                  setCurrentScreen('dashboard');
-                }}
-                onFabClick={() => setIsFabMenuOpen(true)}
-              />
-            </div>
+            {currentScreen === 'dashboard' && (
+              <div className="shrink-0 z-30 w-full bg-[#0c0c14] border-t border-white/5 pb-safe">
+                <BottomNav
+                  activeTab={activeTab}
+                  onTabChange={(tab) => {
+                    setActiveTab(tab);
+                    setCurrentScreen('dashboard');
+                  }}
+                  onFabClick={() => setIsFabMenuOpen(true)}
+                />
+              </div>
+            )}
 
             {/* Quick action fab overlay sheet */}
             <QuickFabMenu
