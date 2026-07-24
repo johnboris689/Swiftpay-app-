@@ -17,6 +17,7 @@ import {
   CheckCircle,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   X,
   CreditCard,
   UserCheck,
@@ -1388,25 +1389,199 @@ export default function App() {
     }
   };
 
-  // Verify Account Name manually (Transfer Bank)
+  // ----------------------------------------------------
+  // Real-time Bank Account Verification Effect (Transfer Bank)
+  // ----------------------------------------------------
   useEffect(() => {
-    if (transferBank && transferAccNum.length === 10 && transferAccName.trim().length >= 3) {
-      setTransferVerified(true);
-      setTransferError(null);
-    } else {
-      setTransferVerified(false);
-    }
-  }, [transferBank, transferAccNum, transferAccName]);
+    let isMounted = true;
 
-  // Verify Account Name manually (Withdrawal Modal)
-  useEffect(() => {
-    if (withdrawBank && withdrawAccount.length === 10 && withdrawAccName.trim().length >= 3) {
-      setWithdrawVerified(true);
-      setWithdrawError(null);
-    } else {
-      setWithdrawVerified(false);
+    if (!transferAccNum || transferAccNum.length !== 10) {
+      setTransferVerified(false);
+      setTransferAccName('');
+      setTransferError(null);
+      setIsVerifyingAccount(false);
+      return;
     }
-  }, [withdrawBank, withdrawAccount, withdrawAccName]);
+
+    if (!transferBank) {
+      setTransferVerified(false);
+      setTransferError('Please select a bank');
+      setIsVerifyingAccount(false);
+      return;
+    }
+
+    const cacheKey = `${transferBank}:${transferAccNum}`;
+    const cached = verificationCacheRef.current[cacheKey];
+
+    if (cached) {
+      if (cached.success && cached.accountName) {
+        setTransferAccName(cached.accountName);
+        setTransferVerified(true);
+        setTransferError(null);
+      } else {
+        setTransferAccName('');
+        setTransferVerified(false);
+        setTransferError(cached.error || 'Invalid account number or bank combination');
+      }
+      setIsVerifyingAccount(false);
+      return;
+    }
+
+    setIsVerifyingAccount(true);
+    setTransferError(null);
+    setTransferVerified(false);
+
+    const controller = new AbortController();
+    const token = localStorage.getItem('swiftpay_auth_token');
+
+    fetch('/api/verify-account', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        bank: transferBank,
+        accountNumber: transferAccNum
+      }),
+      signal: controller.signal
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!isMounted) return;
+
+        if (res.ok && data.success && data.accountName) {
+          verificationCacheRef.current[cacheKey] = {
+            success: true,
+            accountName: data.accountName
+          };
+          setTransferAccName(data.accountName);
+          setTransferVerified(true);
+          setTransferError(null);
+        } else {
+          const errMsg = data.error || 'Invalid account number or bank combination';
+          verificationCacheRef.current[cacheKey] = {
+            success: false,
+            error: errMsg
+          };
+          setTransferAccName('');
+          setTransferVerified(false);
+          setTransferError(errMsg);
+        }
+      })
+      .catch((err) => {
+        if (!isMounted || err.name === 'AbortError') return;
+        setTransferVerified(false);
+        setTransferError('Failed to verify account. Please check network connection.');
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsVerifyingAccount(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [transferBank, transferAccNum]);
+
+  // ----------------------------------------------------
+  // Real-time Bank Account Verification Effect (Withdrawal Modal)
+  // ----------------------------------------------------
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!withdrawAccount || withdrawAccount.length !== 10) {
+      setWithdrawVerified(false);
+      setWithdrawAccName('');
+      setWithdrawError(null);
+      setIsVerifyingWithdrawAccount(false);
+      return;
+    }
+
+    if (!withdrawBank) {
+      setWithdrawVerified(false);
+      setWithdrawError('Please select a bank');
+      setIsVerifyingWithdrawAccount(false);
+      return;
+    }
+
+    const cacheKey = `${withdrawBank}:${withdrawAccount}`;
+    const cached = verificationCacheRef.current[cacheKey];
+
+    if (cached) {
+      if (cached.success && cached.accountName) {
+        setWithdrawAccName(cached.accountName);
+        setWithdrawVerified(true);
+        setWithdrawError(null);
+      } else {
+        setWithdrawAccName('');
+        setWithdrawVerified(false);
+        setWithdrawError(cached.error || 'Invalid account number or bank combination');
+      }
+      setIsVerifyingWithdrawAccount(false);
+      return;
+    }
+
+    setIsVerifyingWithdrawAccount(true);
+    setWithdrawError(null);
+    setWithdrawVerified(false);
+
+    const controller = new AbortController();
+    const token = localStorage.getItem('swiftpay_auth_token');
+
+    fetch('/api/verify-account', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        bank: withdrawBank,
+        accountNumber: withdrawAccount
+      }),
+      signal: controller.signal
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!isMounted) return;
+
+        if (res.ok && data.success && data.accountName) {
+          verificationCacheRef.current[cacheKey] = {
+            success: true,
+            accountName: data.accountName
+          };
+          setWithdrawAccName(data.accountName);
+          setWithdrawVerified(true);
+          setWithdrawError(null);
+        } else {
+          const errMsg = data.error || 'Invalid account number or bank combination';
+          verificationCacheRef.current[cacheKey] = {
+            success: false,
+            error: errMsg
+          };
+          setWithdrawAccName('');
+          setWithdrawVerified(false);
+          setWithdrawError(errMsg);
+        }
+      })
+      .catch((err) => {
+        if (!isMounted || err.name === 'AbortError') return;
+        setWithdrawVerified(false);
+        setWithdrawError('Failed to verify account. Please check network connection.');
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsVerifyingWithdrawAccount(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [withdrawBank, withdrawAccount]);
 
   // WDV Order Creation (Manual Bank Transfer flow)
   const handleInitiateWdv = (e: React.FormEvent) => {
@@ -4572,38 +4747,61 @@ export default function App() {
                       {/* Account Number */}
                       <div>
                         <label className="text-[10px] font-mono text-slate-400 block mb-1">10-Digit Account Number</label>
-                        <input
-                          id="input-transfer-acc"
-                          type="number"
-                          placeholder="e.g. 8960723295"
-                          required
-                          value={transferAccNum}
-                          onChange={(e) => {
-                            if (e.target.value.length <= 10) {
-                              setTransferAccNum(e.target.value);
-                              setTransferError(null);
-                            }
-                          }}
-                          className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono"
-                        />
+                        <div className="relative">
+                          <input
+                            id="input-transfer-acc"
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="e.g. 8960723295"
+                            required
+                            value={transferAccNum}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9]/g, '');
+                              if (val.length <= 10) {
+                                setTransferAccNum(val);
+                              }
+                            }}
+                            className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono pr-10"
+                          />
+                          {isVerifyingAccount && (
+                            <div className="absolute right-3 top-2.5 flex items-center">
+                              <div className="h-4 w-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Account Name */}
-                      <div>
-                        <label className="text-[10px] font-mono text-slate-400 block mb-1">Account Name (MANUAL ENTER)</label>
-                        <input
-                          id="input-transfer-acc-name-manual"
-                          type="text"
-                          placeholder="Enter account name manually"
-                          required
-                          value={transferAccName}
-                          onChange={(e) => {
-                            setTransferAccName(e.target.value);
-                            setTransferError(null);
-                          }}
-                          className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-400"
-                        />
-                      </div>
+                      {/* Real-Time Bank Verification Status Indicator */}
+                      {isVerifyingAccount && (
+                        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-2.5 text-xs text-indigo-600 dark:text-teal-400 font-medium animate-pulse">
+                          <div className="h-4 w-4 border-2 border-indigo-500 dark:border-teal-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                          <span>Verifying account details with {transferBank}...</span>
+                        </div>
+                      )}
+
+                      {transferVerified && transferAccName && !isVerifyingAccount && (
+                        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/25 rounded-xl space-y-1 animate-[fadeIn_0.15s_ease-out]">
+                          <div className="flex justify-between items-center text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                              VERIFIED ACCOUNT HOLDER
+                            </span>
+                            <span className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 px-2 py-0.5 rounded text-[9px] uppercase font-bold">
+                              Verified ✓
+                            </span>
+                          </div>
+                          <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300 tracking-wide font-mono uppercase">
+                            {transferAccName}
+                          </div>
+                        </div>
+                      )}
+
+                      {transferError && !isVerifyingAccount && transferAccNum.length === 10 && (
+                        <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                          <AlertCircle className="h-4 w-4 text-rose-500 shrink-0" />
+                          <span>{transferError}</span>
+                        </div>
+                      )}
 
                       {/* Amount */}
                       <div>
@@ -5134,37 +5332,61 @@ export default function App() {
 
                     <div>
                       <label className="text-[10px] font-mono text-slate-400 block mb-1">Account Number</label>
-                      <input
-                        id="withdraw-acc-num"
-                        type="number"
-                        placeholder="10-digit number"
-                        required
-                        value={withdrawAccount}
-                        onChange={(e) => {
-                          if (e.target.value.length <= 10) {
-                            setWithdrawAccount(e.target.value);
-                            setWithdrawError(null);
-                          }
-                        }}
-                        className="w-full text-xs bg-slate-100 dark:bg-slate-950 border border-transparent dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white font-mono"
-                      />
+                      <div className="relative">
+                        <input
+                          id="withdraw-acc-num"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="10-digit number"
+                          required
+                          value={withdrawAccount}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9]/g, '');
+                            if (val.length <= 10) {
+                              setWithdrawAccount(val);
+                            }
+                          }}
+                          className="w-full text-xs bg-slate-100 dark:bg-slate-950 border border-transparent dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white font-mono pr-10"
+                        />
+                        {isVerifyingWithdrawAccount && (
+                          <div className="absolute right-3 top-2.5 flex items-center">
+                            <div className="h-4 w-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="text-[10px] font-mono text-slate-400 block mb-1">Account Name (MANUAL ENTER)</label>
-                      <input
-                        id="withdraw-acc-name-manual"
-                        type="text"
-                        placeholder="Enter account name manually"
-                        required
-                        value={withdrawAccName}
-                        onChange={(e) => {
-                          setWithdrawAccName(e.target.value);
-                          setWithdrawError(null);
-                        }}
-                        className="w-full text-xs bg-slate-100 dark:bg-slate-950 border border-transparent dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-800 dark:text-white"
-                      />
-                    </div>
+                    {/* Real-time Account Verification Result for Withdrawal */}
+                    {isVerifyingWithdrawAccount && (
+                      <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-2.5 text-xs text-indigo-600 dark:text-teal-400 font-medium animate-pulse">
+                        <div className="h-4 w-4 border-2 border-indigo-500 dark:border-teal-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                        <span>Verifying account details with {withdrawBank}...</span>
+                      </div>
+                    )}
+
+                    {withdrawVerified && withdrawAccName && !isVerifyingWithdrawAccount && (
+                      <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/25 rounded-xl space-y-1 animate-[fadeIn_0.15s_ease-out]">
+                        <div className="flex justify-between items-center text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                            VERIFIED ACCOUNT HOLDER
+                          </span>
+                          <span className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 px-2 py-0.5 rounded text-[9px] uppercase font-bold">
+                            Verified ✓
+                          </span>
+                        </div>
+                        <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300 tracking-wide font-mono uppercase">
+                          {withdrawAccName}
+                        </div>
+                      </div>
+                    )}
+
+                    {withdrawError && !isVerifyingWithdrawAccount && withdrawAccount.length === 10 && (
+                      <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                        <AlertCircle className="h-4 w-4 text-rose-500 shrink-0" />
+                        <span>{withdrawError}</span>
+                      </div>
+                    )}
 
                     <div>
                       <label className="text-[10px] font-mono text-slate-400 block mb-1">Withdrawal Amount (₦)</label>
